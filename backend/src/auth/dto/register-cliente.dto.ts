@@ -1,4 +1,4 @@
-export class RegisterNineraDto {
+export class RegisterClienteDto {
   correo: string;
   password: string;
   rol: string;
@@ -12,9 +12,4 @@ export class RegisterNineraDto {
   foto_url: string;
   DNI_frontal_url: string;
   DNI_reverso_url: string;
-  Antecedentes_penales_url: string;
-  tarifa: number;
-
-  presentacion: string;
-  experiencia?: string | null;
 }

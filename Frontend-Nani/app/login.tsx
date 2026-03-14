@@ -1,18 +1,19 @@
-import React, { useState } from "react";
+import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import {ENDPOINTS} from '../constants/apiConfig';
 import {
-  View,
-  Text,
-  Image,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
   Alert,
   ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons, MaterialIcons, Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -31,7 +32,7 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
-      const response = await fetch("http://192.168.0.17:3000/auth/login", {
+      const response = await fetch(ENDPOINTS.login, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -48,9 +49,16 @@ export default function LoginScreen() {
         Alert.alert("Error", data.message || "No se pudo iniciar sesión");
         return;
       }
-
-      Alert.alert("Éxito", "Inicio de sesión correcto");
-      router.push("/home");
+      
+      if (data.user.rol === 'ninera') {
+        router.replace("/register/babysister/BabysitterDashboard"); 
+      } else if (data.user.rol === 'cliente') {
+        router.replace("/register/client/home"); 
+      } else {
+        
+        Alert.alert("Éxito", "Inicio de sesión correcto");
+        router.replace("/"); 
+      }
     } catch (error) {
       Alert.alert("Error", "No se pudo conectar con el servidor");
       console.log(error);
@@ -60,27 +68,23 @@ export default function LoginScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={["#FF7A8A", "#8B6CCB"]}
-      style={styles.container}
-    >
+    <LinearGradient colors={["#FF7A8A", "#8B6CCB"]} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
+        {/* LOGO */}
         <View style={styles.logoContainer}>
           <Image
             source={require("../assets/images/logo.png")}
             style={styles.logo}
           />
-          <Text style={styles.subtitle}>
-            Cuidamos lo que más amas
-          </Text>
+          <Text style={styles.subtitle}>Cuidamos lo que más amas</Text>
         </View>
 
+        {/* CARD */}
         <View style={styles.card}>
           <Text style={styles.title}>¡Bienvenido!</Text>
-          <Text style={styles.description}>
-            Inicia sesión para continuar
-          </Text>
+          <Text style={styles.description}>Inicia sesión para continuar</Text>
 
+          {/* EMAIL */}
           <Text style={styles.label}>Correo electrónico</Text>
           <View style={styles.inputContainer}>
             <MaterialIcons name="email" size={20} color="#9CA3AF" />
@@ -90,11 +94,10 @@ export default function LoginScreen() {
               value={email}
               onChangeText={setEmail}
               style={styles.input}
-              autoCapitalize="none"
-              keyboardType="email-address"
             />
           </View>
 
+          {/* PASSWORD */}
           <Text style={styles.label}>Contraseña</Text>
           <View style={styles.inputContainer}>
             <Feather name="lock" size={20} color="#9CA3AF" />
@@ -115,28 +118,32 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* FORGOT */}
           <TouchableOpacity style={styles.forgot}>
             <Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
           </TouchableOpacity>
 
+          {/* BUTTON */}
           <TouchableOpacity
             style={styles.loginButton}
             onPress={handleLogin}
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="white" />
+             <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.loginText}>Iniciar sesión</Text>
+            <Text style={styles.loginText}>Iniciar sesión</Text>
             )}
           </TouchableOpacity>
 
+          {/* DIVIDER */}
           <View style={styles.divider}>
             <View style={styles.line} />
             <Text style={styles.dividerText}>O continúa con</Text>
             <View style={styles.line} />
           </View>
 
+          {/* GOOGLE */}
           <TouchableOpacity style={styles.googleButton}>
             <Image
               source={{
@@ -147,6 +154,7 @@ export default function LoginScreen() {
             <Text style={styles.googleText}>Google</Text>
           </TouchableOpacity>
 
+          {/* REGISTER */}
           <View style={styles.register}>
             <Text style={styles.registerText}>¿No tienes cuenta?</Text>
             <TouchableOpacity onPress={() => router.push("/register")}>

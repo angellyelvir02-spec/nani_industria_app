@@ -515,8 +515,7 @@ import {
   ScrollView,
   StyleSheet,
   Image,
-  Alert,
-  ActivityIndicator,
+  Alert
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -524,12 +523,11 @@ import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
-
+import {ENDPOINTS} from '../../../constants/apiConfig';
 export default function BabysitterRegistrationForm() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const totalSteps = 3;
-  const [loading, setLoading] = useState(false);
 
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -581,7 +579,8 @@ export default function BabysitterRegistrationForm() {
 
       setFormData({
         ...formData,
-        birthDate: selectedDate.toISOString().split("T")[0],
+
+        birthDate: selectedDate.toISOString().split('T')[0],
         age: age.toString(),
       });
     }
@@ -655,83 +654,124 @@ export default function BabysitterRegistrationForm() {
     setCertificateInput("");
   };
 
-  const handleRegister = async () => {
-    try {
-      setLoading(true);
+  // 1. Asegúrate de tener 'loading' en tus estados (ya lo tienes, pero verifica)
+  const [loading, setLoading] = useState(false);
 
-      const response = await fetch("http://192.168.0.17:3000/auth/register/ninera", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          correo: formData.email,
-          password: "hola1234",
-          nombre: formData.firstName,
-          apellido: formData.lastName,
-          telefono: formData.phone,
-          ubicacion: formData.location,
-          fecha_nacimiento: formData.birthDate || null,
-          foto_url: null,
-          presentacion: null,
-          experiencia: null,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert("Error", data.message || "No se pudo completar el registro");
-        return;
-      }
-
-      Alert.alert(
-        "Registro exitoso",
-        "La niñera fue registrada correctamente. La contraseña temporal es: hola1234",
-        [
-          {
-            text: "OK",
-            onPress: () => router.replace("/login"),
-          },
-        ]
-      );
-    } catch (error) {
-      console.log(error);
-      Alert.alert("Error", "No se pudo conectar con el servidor");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleNext = () => {
+  const handleNext = async () => {
+    // --- PASO 1: VALIDACIONES ---
     if (step === 1) {
       if (!formData.firstName || !formData.lastName) {
         Alert.alert("Error", "Ingresa tu nombre completo");
         return;
       }
-
       if (!formData.email.includes("@")) {
         Alert.alert("Error", "Correo inválido");
         return;
       }
-
-      if (!formData.phone || !formData.location) {
-        Alert.alert("Error", "Completa teléfono y ubicación");
-        return;
-      }
-
       if (Number(formData.age) < 18) {
         Alert.alert("Error", "Debes ser mayor de edad");
         return;
       }
-    }
-
-    if (step < totalSteps) {
-      setStep(step + 1);
+      if (formData.password.length < 6) {
+        Alert.alert("Error", "La contraseña debe tener mínimo 6 caracteres");
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        Alert.alert("Error", "Las contraseñas no coinciden");
+        return;
+      }
+      setStep(2);
       return;
     }
 
-    handleRegister();
+    // --- PASO 2: AVANZAR ---
+    if (step === 2) {
+      setStep(3);
+      return;
+    }
+
+    // --- PASO 3: ENVÍO AL BACKEND (CON IMÁGENES) ---
+    if (step === 3) {
+      try {
+        setLoading(true);
+
+        const data = new FormData();
+
+        // 1. Datos personales (Asegúrate de que estos nombres coincidan con tu DTO en NestJS)
+        data.append("nombre", formData.firstName);
+        data.append("apellido", formData.lastName);
+        data.append("correo", formData.email);
+        data.append("password", formData.password);
+        data.append("telefono", formData.phone);
+        data.append("ubicacion", formData.location);
+        data.append("fecha_nacimiento", formData.birthDate);
+        data.append("edad", formData.age);
+        data.append("presentacion", formData.presentation);
+        data.append("experiencia", formData.experience);
+        data.append("tarifa", formData.rate);
+
+        // 2. Arreglos (Habilidades y Certificados)
+        formData.skills.forEach((skill) => {
+          data.append("habilidades", skill);
+        });
+        formData.certificates.forEach((cert) => {
+          data.append("certificados", cert);
+        });
+
+        // 3. Imágenes Reales (Procesamiento de URI para FormData)
+        if (formData.facePhoto) {
+          const photo = formData.facePhoto;
+          data.append("DNI_frontal_url", {
+            uri: formData.facePhoto.uri,
+            type: "image/jpeg",
+            name: `${formData.email}_frontal.jpg`,
+          } as any);
+        }
+
+        if (formData.idPhoto) {
+          const photo = formData.idPhoto;
+          data.append("DNI_reverso_url", {
+            uri: formData.idPhoto.uri,
+            type: "image/jpeg",
+            name: `${formData.email}_frontal.jpg`,
+          } as any);
+        }
+
+        if (formData.criminalRecordPhoto) {
+          const doc = formData.criminalRecordPhoto;
+          data.append("Antecedentes_penales_url", {
+            uri: doc.uri,
+            type: doc.mimeType || "application/pdf",
+            name: doc.name || `${formData.email}_antecedentes.pdf`,
+          } as any);
+        }
+
+        // 4. Petición al Servidor
+        const response = await fetch(ENDPOINTS.register, {
+          method: "POST",
+          headers: {
+            
+          },
+          body: data,
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.message || "Error al registrar niñera");
+        }
+
+        Alert.alert("¡Éxito!", "Tu registro ha sido enviado y será revisado.", [
+          { text: "OK", onPress: () => router.replace("/login") }
+        ]);
+
+      } catch (error: any) {
+        Alert.alert("Error de Conexión", error.message || "No se pudo conectar con el servidor");
+        console.error("Error en registro:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   const handleBack = () => {
@@ -799,7 +839,7 @@ export default function BabysitterRegistrationForm() {
               <Text style={styles.label}>Fecha de nacimiento</Text>
               <TouchableOpacity
                 style={styles.inputContainer}
-                onPress={() => setShowDatePicker(true)}
+                onPress={()=>setShowDatePicker(true)}
               >
                 <Ionicons name="calendar-outline" size={18} color="#9CA3AF" />
                 <TextInput
@@ -834,8 +874,6 @@ export default function BabysitterRegistrationForm() {
                 <TextInput
                   placeholder="tu@email.com"
                   style={styles.input}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
                   onChangeText={(v) => handleInputChange("email", v)}
                 />
               </View>
@@ -857,6 +895,28 @@ export default function BabysitterRegistrationForm() {
                   placeholder="Ciudad, País"
                   style={styles.input}
                   onChangeText={(v) => handleInputChange("location", v)}
+                />
+              </View>
+
+              <Text style={styles.label}>Contraseña</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={18} color="#9CA3AF" />
+                <TextInput
+                  placeholder="Contraseña"
+                  secureTextEntry
+                  style={styles.input}
+                  onChangeText={(v)=>handleInputChange("password",v)}
+                />
+              </View>
+
+              <Text style={styles.label}>Confirmar contraseña</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={18} color="#9CA3AF" />
+                <TextInput
+                  placeholder="Confirmar contraseña"
+                  secureTextEntry
+                  style={styles.input}
+                  onChangeText={(v)=>handleInputChange("confirmPassword",v)}
                 />
               </View>
             </View>
@@ -886,8 +946,8 @@ export default function BabysitterRegistrationForm() {
 
                 {formData.idPhoto && (
                   <Image
-                    source={{ uri: formData.idPhoto.uri }}
-                    style={{ width: 80, height: 80, marginTop: 10, borderRadius: 10 }}
+                    source={{uri:formData.idPhoto.uri}}
+                    style={{width:80,height:80,marginTop:10,borderRadius:10}}
                   />
                 )}
               </TouchableOpacity>
@@ -900,8 +960,8 @@ export default function BabysitterRegistrationForm() {
 
                 {formData.facePhoto && (
                   <Image
-                    source={{ uri: formData.facePhoto.uri }}
-                    style={{ width: 80, height: 80, marginTop: 10, borderRadius: 10 }}
+                    source={{uri:formData.facePhoto.uri}}
+                    style={{width:80,height:80,marginTop:10,borderRadius:10}}
                   />
                 )}
               </TouchableOpacity>
@@ -950,20 +1010,17 @@ export default function BabysitterRegistrationForm() {
               </View>
 
               {formData.skills.map((skill, i) => (
-                <View
-                  key={i}
-                  style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}
-                >
+                <View key={i} style={{flexDirection:"row",justifyContent:"space-between",alignItems:"center"}}>
                   <Text style={styles.tag}>{skill}</Text>
 
                   <TouchableOpacity
-                    onPress={() => {
-                      const updated = [...formData.skills];
-                      updated.splice(i, 1);
-                      setFormData({ ...formData, skills: updated });
+                    onPress={()=>{
+                      const updated=[...formData.skills]
+                      updated.splice(i,1)
+                      setFormData({...formData,skills:updated})
                     }}
                   >
-                    <Ionicons name="close-circle" size={20} color="#FF768A" />
+                    <Ionicons name="close-circle" size={20} color="#FF768A"/>
                   </TouchableOpacity>
                 </View>
               ))}
@@ -993,20 +1050,17 @@ export default function BabysitterRegistrationForm() {
               </View>
 
               {formData.certificates.map((c, i) => (
-                <View
-                  key={i}
-                  style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}
-                >
+                <View key={i} style={{flexDirection:"row",justifyContent:"space-between",alignItems:"center"}}>
                   <Text style={styles.tag}>{c}</Text>
 
                   <TouchableOpacity
-                    onPress={() => {
-                      const updated = [...formData.certificates];
-                      updated.splice(i, 1);
-                      setFormData({ ...formData, certificates: updated });
+                    onPress={()=>{
+                      const updated=[...formData.certificates]
+                      updated.splice(i,1)
+                      setFormData({...formData,certificates:updated})
                     }}
                   >
-                    <Ionicons name="close-circle" size={20} color="#FF768A" />
+                    <Ionicons name="close-circle" size={20} color="#FF768A"/>
                   </TouchableOpacity>
                 </View>
               ))}
@@ -1019,7 +1073,7 @@ export default function BabysitterRegistrationForm() {
                 placeholder="Ej: 200 LPS"
                 keyboardType="numeric"
                 style={styles.input}
-                onChangeText={(v) => handleInputChange("rate", v)}
+                onChangeText={(v)=>handleInputChange("rate",v)}
               />
             </View>
 
@@ -1035,18 +1089,10 @@ export default function BabysitterRegistrationForm() {
           </>
         )}
 
-        <TouchableOpacity
-          style={[styles.mainBtn, loading && { opacity: 0.7 }]}
-          onPress={handleNext}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text style={styles.mainBtnText}>
-              {step === totalSteps ? "Completar registro" : "Continuar"}
-            </Text>
-          )}
+        <TouchableOpacity style={styles.mainBtn} onPress={handleNext}>
+          <Text style={styles.mainBtnText}>
+            {step === totalSteps ? "Completar registro" : "Continuar"}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

@@ -40,7 +40,7 @@ export default function RegisterScreen() {
         {/* CLIENTE */}
         <TouchableOpacity
           style={styles.card}
-          onPress={() => setAccountType("client")}
+          onPress={() => router.push("./register/client/ClientRegistrationForm")}
         >
           <View style={styles.cardRow}>
             <View style={[styles.iconBox, { backgroundColor: "#FF768A" }]}>

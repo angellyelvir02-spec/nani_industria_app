@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { SupabaseModule } from './supabase/supabase.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { NinerasModule } from './nineras/nineras.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AuthModule } from './auth/auth.module';
     SupabaseModule,
     UsersModule,
     AuthModule,
+    NinerasModule,
   ],
   controllers: [AppController],
   providers: [AppService],

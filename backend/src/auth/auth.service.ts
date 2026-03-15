@@ -160,55 +160,70 @@ export class AuthService {
   async registerCliente(dto: RegisterClienteDto, files: any) {
     const admin = this.supabaseService.getAdminClient();
 
-      // --- 1. SUBIR ARCHIVOS A STORAGE ---
+    // --- 1. SUBIR ARCHIVOS A STORAGE --- (Esto ya te funciona)
     const uploadFile = async (file: Express.Multer.File, bucket: string) => {
-    const fileName = `cliente-${Date.now()}-${file.originalname}`;
-    const { data, error } = await admin.storage
-      .from(bucket)
-      .upload(fileName, file.buffer, { contentType: file.mimetype });
-    
-    if (error) throw new BadRequestException(`Error storage: ${error.message}`);
-    return admin.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
+        const fileName = `cliente-${Date.now()}-${file.originalname}`;
+        const { data, error } = await admin.storage
+            .from(bucket)
+            .upload(fileName, file.buffer, { contentType: file.mimetype });
+
+        if (error) throw new BadRequestException(`Error storage: ${error.message}`);
+        return admin.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
     };
 
     let urlDni = '';
     let urlSelfie = '';
-    
+
     if (files?.DNI_frontal_url) urlDni = await uploadFile(files.DNI_frontal_url[0], 'documentos');
     if (files?.foto_url) urlSelfie = await uploadFile(files.foto_url[0], 'documentos');
 
     // --- 2. CREAR EN SUPABASE AUTH ---
     const { data: authCreated, error: authError } = await admin.auth.admin.createUser({
-      email: dto.correo,
-      password: dto.password,
-      email_confirm: true,
+        email: dto.correo,
+        password: dto.password,
+        email_confirm: true,
     });
     if (authError) throw new BadRequestException(authError.message);
 
     // --- 3. INSERTAR EN TABLA USUARIO ---
     const { data: usuario, error: uError } = await admin
-    .from('usuario')
-    .insert({
-      auth_id: authCreated.user.id,
-      correo: dto.correo,
-      rol: 'cliente',
-    })
-    .select().single();
+        .from('usuario')
+        .insert({
+            auth_id: authCreated.user.id,
+            correo: dto.correo,
+            rol: 'cliente',
+        })
+        .select().single();
     if (uError) throw new BadRequestException(uError.message);
 
     // --- 4. INSERTAR EN TABLA PERSONA ---
-    const { error: pError } = await admin
-    .from('persona')
-    .insert({
-      nombre: dto.nombre,
-      apellido: dto.apellido,
-      telefono: dto.telefono,
-      ubicacion: dto.ubicacion,
-      foto_url: urlSelfie,      
-      DNI_frontal_url: urlDni,  
-    });
+    // Agregamos .select().single() para capturar el ID de la persona creada
+    const { data: persona, error: pError } = await admin
+        .from('persona')
+        .insert({
+            nombre: dto.nombre,
+            apellido: dto.apellido,
+            telefono: dto.telefono,
+            ubicacion: dto.ubicacion,
+            foto_url: urlSelfie,
+            DNI_frontal_url: urlDni,
+        })
+        .select().single(); // <--- IMPORTANTE: Esto permite obtener persona.id
+        
     if (pError) throw new BadRequestException(pError.message);
+
+    // --- 5. INSERTAR EN TABLA CLIENTE ---
+    // Ahora insertamos en la tabla cliente vinculando los IDs anteriores
+    const { error: cError } = await admin
+        .from('cliente')
+        .insert({
+            persona_id: persona.id, // ID obtenido del paso 4
+            usuario_id: usuario.id, // ID obtenido del paso 3
+        });
+
+    if (cError) throw new BadRequestException(cError.message);
+
+    // Solo retornamos éxito si TODO el proceso terminó bien
     return { message: 'Cliente registrado con éxito' };
 }
-
 }

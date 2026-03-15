@@ -2,6 +2,8 @@ export class RegisterNineraDto {
   correo: string;
   password: string;
   rol: string;
+  habilidades: string;
+  certificaciones: string;
 
   nombre: string;
   apellido: string;

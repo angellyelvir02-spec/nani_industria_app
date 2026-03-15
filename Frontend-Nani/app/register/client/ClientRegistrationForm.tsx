@@ -136,7 +136,7 @@ export default function ClientRegistrationForm() {
 
       const response = await fetch(ENDPOINTS.register_cliente, {
         method: "POST",
-        body: data,
+        body: data, 
         headers: {},
       });
 
@@ -144,7 +144,7 @@ export default function ClientRegistrationForm() {
       if (!response.ok) throw new Error(result.message || "Error al registrar");
 
       Alert.alert("¡Éxito!", "Cuenta creada.", [
-        { text: "Ir al Login", onPress: () => router.replace("/login") }
+        { text: "Ok", onPress: () => router.replace("/login") }
       ]);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Error de conexión");
@@ -289,8 +289,17 @@ export default function ClientRegistrationForm() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F3F4F6" },
-  header: { paddingTop: 60, paddingBottom: 30, paddingHorizontal: 20, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
+  container: {
+    flex: 1, 
+    backgroundColor: "#F3F4F6"
+  },
+  header: { 
+    paddingTop: 60, 
+    paddingBottom: 30, 
+    paddingHorizontal: 20, 
+    borderBottomLeftRadius: 30, 
+    borderBottomRightRadius: 30 
+  },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 15 },
   backBtn: { width: 40, height: 40, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 20, justifyContent: "center", alignItems: "center" },
   headerTitle: { color: "white", fontWeight: "bold", fontSize: 18 },

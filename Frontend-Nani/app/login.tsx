@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -24,48 +25,69 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Completa el correo y la contraseña");
+  if (!email || !password) {
+    Alert.alert("Error", "Completa el correo y la contraseña");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const response = await fetch(ENDPOINTS.login, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        correo: email,
+        password: password,
+      }),
+    });
+
+    const data = await response.json();
+
+    // 1. MANEJO DE ERRORES DEL BACKEND (401, 404, etc.)
+    if (!response.ok) {
+      // Aquí entrará si el backend lanza UnauthorizedException (Contraseña mal o usuario no existe)
+      // O si el perfil de la niñera aún no está verificado.
+      Alert.alert("Atención", data.message || "No se pudo iniciar sesión");
       return;
     }
 
+    // 2. GUARDAR DATOS Y REDIRECCIÓN
     try {
-      setLoading(true);
+      // Verificamos que data.user exista para evitar el error de "undefined"
+      if (data.user && data.user.id) {
+        await AsyncStorage.setItem("userId", data.user.id.toString());
+        await AsyncStorage.setItem("userRole", data.user.rol);
 
-      const response = await fetch(ENDPOINTS.login, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          correo: email,
-          password: password,
-        }),
-      });
+        if (data.session?.access_token) {
+          await AsyncStorage.setItem("userToken", data.session.access_token);
+        }
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert("Error", data.message || "No se pudo iniciar sesión");
-        return;
-      }
-      
-      if (data.user.rol === 'ninera') {
-        router.replace("/register/babysister/BabysitterDashboard"); 
-      } else if (data.user.rol === 'cliente') {
-        router.replace("/register/client/home"); 
+        // Redirección basada en el rol
+        if (data.user.rol === 'ninera') {
+          router.replace("/register/babysister/BabysitterDashboard");
+        } else if (data.user.rol === 'cliente') {
+          router.replace("/register/client/home");
+        } else {
+          router.replace("/");
+        }
       } else {
-        
-        Alert.alert("Éxito", "Inicio de sesión correcto");
-        router.replace("/"); 
+        throw new Error("El servidor no devolvió los datos del usuario");
       }
-    } catch (error) {
-      Alert.alert("Error", "No se pudo conectar con el servidor");
-      console.log(error);
-    } finally {
-      setLoading(false);
+    } catch (storageError) {
+      console.error("Error al guardar sesión", storageError);
+      Alert.alert("Error", "No se pudo guardar la sesión en el dispositivo");
     }
-  };
+  } catch (error) {
+    // Error de red (servidor apagado, sin internet)
+    Alert.alert("Error", "No se pudo conectar con el servidor");
+    console.log(error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <LinearGradient colors={["#FF7A8A", "#8B6CCB"]} style={styles.container}>

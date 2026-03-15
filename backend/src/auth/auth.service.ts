@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
+  
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { LoginDto } from './dto/login.dto';
@@ -59,68 +60,57 @@ export class AuthService {
     };
   }
 
-  async registerNinera(dto: RegisterNineraDto, files: any) {
-    const admin = this.supabaseService.getAdminClient();
-    
-    // --- FUNCIÓN PARA SUBIR ARCHIVOS ---
-    const uploadFile = async (file: Express.Multer.File, bucket: string) => {
-    
+ async registerNinera(dto: RegisterNineraDto, files: any) {
+  const admin = this.supabaseService.getAdminClient();
+
+  // --- FUNCIÓN PARA SUBIR ARCHIVOS ---
+  const uploadFile = async (file: Express.Multer.File, bucket: string) => {
     const fileName = `${Date.now()}-${file.originalname.replace(/\s/g, '_')}`;
     const { data, error } = await admin.storage
       .from(bucket)
-      .upload(fileName, file.buffer, { 
+      .upload(fileName, file.buffer, {
         contentType: file.mimetype,
-        upsert: true 
+        upsert: true,
       });
-      if (error) throw new BadRequestException(`Error subiendo archivo: ${error.message}`);
+    if (error) throw new BadRequestException(`Error subiendo archivo: ${error.message}`);
+    return admin.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
+  };
 
-    // Obtener URL pública
-       return admin.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
-    };
+  let urlFrontal = '';
+  let urlReverso = '';
+  let urlAntecedentes = '';
 
-    
-    let urlFrontal = '';
-    let urlReverso = '';
-    let urlAntecedentes = '';
+  if (files?.DNI_frontal_url) urlFrontal = await uploadFile(files.DNI_frontal_url[0], 'documentos');
+  if (files?.DNI_reverso_url) urlReverso = await uploadFile(files.DNI_reverso_url[0], 'documentos');
+  if (files?.Antecedentes_penales_url) urlAntecedentes = await uploadFile(files.Antecedentes_penales_url[0], 'documentos');
 
-    if (files?.DNI_frontal_url) {
-      urlFrontal = await uploadFile(files.DNI_frontal_url[0], 'documentos');
-    }
-    if (files?.DNI_reverso_url) {
-      urlReverso = await uploadFile(files.DNI_reverso_url[0], 'documentos');
-    }
-    
-    if (files?.Antecedentes_penales_url) {
-     urlAntecedentes = await uploadFile(files.Antecedentes_penales_url[0], 'documentos');
-    }
+  // 1. Crear usuario en Supabase Auth
+  const { data: authCreated, error: authError } = await admin.auth.admin.createUser({
+    email: dto.correo,
+    password: dto.password,
+    email_confirm: true,
+  });
 
-    // 2. Crear usuario en Supabase Auth
-    const { data: authCreated, error: authError } = await admin.auth.admin.createUser({
-      email: dto.correo,
-      password: dto.password,
-      email_confirm: true,
-    });
+  if (authError || !authCreated.user) {
+    throw new BadRequestException(authError?.message || 'No se pudo crear el usuario en Auth');
+  }
 
-    if (authError || !authCreated.user) {
-      throw new BadRequestException(authError?.message || 'No se pudo crear el usuario en Auth');
-    }
+  const authUserId = authCreated.user.id;
 
-    const authUserId = authCreated.user.id;
+  // 2. Crear registro en tabla usuario
+  const { data: usuario, error: usuarioError } = await admin
+    .from('usuario')
+    .insert({
+      auth_id: authUserId,
+      correo: dto.correo,
+      rol: 'ninera',
+    })
+    .select().single();
 
-    // 3. Crear registro en tabla usuario
-    const { data: usuario, error: usuarioError } = await admin
-      .from('usuario')
-      .insert({
-        auth_id: authUserId,
-        correo: dto.correo,
-        rol: 'ninera',
-      })
-      .select().single();
+  if (usuarioError) throw new BadRequestException(`Error en tabla usuario: ${usuarioError.message}`);
 
-    if (usuarioError) throw new BadRequestException(usuarioError.message);
-
-    // 4. Crear registro en persona
-    const { data: persona, error: personaError } = await admin
+  // 3. Crear registro en persona
+  const { data: persona, error: personaError } = await admin
     .from('persona')
     .insert({
       nombre: dto.nombre,
@@ -128,35 +118,65 @@ export class AuthService {
       telefono: dto.telefono,
       ubicacion: dto.ubicacion,
       fecha_nacimiento: dto.fecha_nacimiento || null,
-      foto_url: dto.foto_url || null, 
-      DNI_frontal_url: urlFrontal,    
-      DNI_reverso_url: urlReverso,    
+      foto_url: dto.foto_url || null,
+      DNI_frontal_url: urlFrontal,
+      DNI_reverso_url: urlReverso,
     })
     .select().single();
 
-    if (personaError) throw new BadRequestException(personaError.message);
+  if (personaError) throw new BadRequestException(`Error en tabla persona: ${personaError.message}`);
 
-  // 5. Crear registro en ninera
-    const { data: ninera, error: nineraError } = await admin
+  // 4. Crear registro en ninera
+  const { data: ninera, error: nineraError } = await admin
     .from('ninera')
     .insert({
       persona_id: persona.id,
       usuario_id: usuario.id,
       presentacion: dto.presentacion,
       experiencia: dto.experiencia ?? null,
-      Antecedentes_penales_url: urlAntecedentes, 
-      tarifa: dto.tarifa,
+      Antecedentes_penales_url: urlAntecedentes,
+      tarifa: Number(dto.tarifa), // Aseguramos que sea número
     })
     .select().single();
 
-    if (nineraError) throw new BadRequestException(nineraError.message);
+  if (nineraError) throw new BadRequestException(`Error en tabla ninera: ${nineraError.message}`);
 
-    return {
-      message: 'Niñera registrada correctamente. recibiras un correo para el siguiente paso ',
-      user: { auth_id: authUserId, usuario, persona, ninera },
-    };
+  // --- LÓGICA MEJORADA PARA HABILIDADES Y CERTIFICACIONES ---
+
+  // Función interna para normalizar entradas (String o Array)
+  const normalizeInput = (input: any) => {
+    if (!input) return [];
+    return Array.isArray(input) ? input : input.split(',').map(i => i.trim());
+  };
+
+  // 5. Insertar Habilidades
+  const listaHabilidades = normalizeInput(dto.habilidades);
+  if (listaHabilidades.length > 0) {
+    const insertHabs = listaHabilidades.map(h => ({
+      ninera_id: ninera.id,
+      nombre: h,
+    }));
+    await admin.from('habilidad_ninera').insert(insertHabs);
   }
 
+  // 6. Insertar Certificaciones (Nota: asegúrate que en el front sea 'certificaciones')
+  const listaCerts = normalizeInput(dto.certificaciones || (dto as any).certificados);
+  if (listaCerts.length > 0) {
+    const insertCerts = listaCerts.map(c => ({
+      ninera_id: ninera.id,
+      nombre: c,
+    }));
+    await admin.from('certificaciones_ninera').insert(insertCerts);
+  }
+
+  return {
+    message: 'Niñera registrada correctamente. Recibirás un correo para el siguiente paso',
+    user: { auth_id: authUserId, usuario_id: usuario.id, ninera_id: ninera.id },
+  };
+}
+
+
+  //////////////////////////////////
   async registerCliente(dto: RegisterClienteDto, files: any) {
     const admin = this.supabaseService.getAdminClient();
 

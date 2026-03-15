@@ -691,87 +691,83 @@ export default function BabysitterRegistrationForm() {
     }
 
     // --- PASO 3: ENVÍO AL BACKEND (CON IMÁGENES) ---
-    if (step === 3) {
-      try {
-        setLoading(true);
+    // --- PASO 3: ENVÍO AL BACKEND ---
+if (step === 3) {
+  try {
+    setLoading(true);
 
-        const data = new FormData();
+    const data = new FormData();
 
-        // 1. Datos personales (Asegúrate de que estos nombres coincidan con tu DTO en NestJS)
-        data.append("nombre", formData.firstName);
-        data.append("apellido", formData.lastName);
-        data.append("correo", formData.email);
-        data.append("password", formData.password);
-        data.append("telefono", formData.phone);
-        data.append("ubicacion", formData.location);
-        data.append("fecha_nacimiento", formData.birthDate);
-        data.append("edad", formData.age);
-        data.append("presentacion", formData.presentation);
-        data.append("experiencia", formData.experience);
-        data.append("tarifa", formData.rate);
+    // 1. Datos personales básicos
+    data.append("nombre", formData.firstName);
+    data.append("apellido", formData.lastName);
+    data.append("correo", formData.email);
+    data.append("password", formData.password);
+    data.append("telefono", formData.phone);
+    data.append("ubicacion", formData.location);
+    data.append("fecha_nacimiento", formData.birthDate);
+    data.append("edad", formData.age);
+    data.append("presentacion", formData.presentation);
+    data.append("experiencia", formData.experience);
+    data.append("tarifa", formData.rate);
 
-        // 2. Arreglos (Habilidades y Certificados)
-        formData.skills.forEach((skill) => {
-          data.append("habilidades", skill);
-        });
-        formData.certificates.forEach((cert) => {
-          data.append("certificados", cert);
-        });
+    // 2. CORRECCIÓN PARA ARREGLOS: Enviar como string separado por comas
+    // Esto es más seguro para que NestJS lo reciba sin líos de tipos
+    data.append("habilidades", formData.skills.join(","));
+    data.append("certificaciones", formData.certificates.join(","));
 
-        // 3. Imágenes Reales (Procesamiento de URI para FormData)
-        if (formData.facePhoto) {
-          const photo = formData.facePhoto;
-          data.append("DNI_frontal_url", {
-            uri: formData.facePhoto.uri,
-            type: "image/jpeg",
-            name: `${formData.email}_frontal.jpg`,
-          } as any);
-        }
-
-        if (formData.idPhoto) {
-          const photo = formData.idPhoto;
-          data.append("DNI_reverso_url", {
-            uri: formData.idPhoto.uri,
-            type: "image/jpeg",
-            name: `${formData.email}_frontal.jpg`,
-          } as any);
-        }
-
-        if (formData.criminalRecordPhoto) {
-          const doc = formData.criminalRecordPhoto;
-          data.append("Antecedentes_penales_url", {
-            uri: doc.uri,
-            type: doc.mimeType || "application/pdf",
-            name: doc.name || `${formData.email}_antecedentes.pdf`,
-          } as any);
-        }
-
-        // 4. Petición al Servidor
-        const response = await fetch(ENDPOINTS.register, {
-          method: "POST",
-          headers: {
-            
-          },
-          body: data,
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(result.message || "Error al registrar niñera");
-        }
-
-        Alert.alert("¡Éxito!", "Tu registro ha sido enviado y será revisado.", [
-          { text: "OK", onPress: () => router.replace("/login") }
-        ]);
-
-      } catch (error: any) {
-        Alert.alert("Error de Conexión", error.message || "No se pudo conectar con el servidor");
-        console.error("Error en registro:", error);
-      } finally {
-        setLoading(false);
-      }
+    // 3. Imágenes (Asegúrate de que los nombres coincidan con los de Multer en el Backend)
+    if (formData.facePhoto) {
+      data.append("DNI_frontal_url", {
+        uri: formData.facePhoto.uri,
+        type: "image/jpeg",
+        name: "foto_rostro.jpg",
+      } as any);
     }
+
+    if (formData.idPhoto) {
+      data.append("DNI_reverso_url", {
+        uri: formData.idPhoto.uri,
+        type: "image/jpeg",
+        name: "dni_reverso.jpg",
+      } as any);
+    }
+
+    if (formData.criminalRecordPhoto) {
+      data.append("Antecedentes_penales_url", {
+        uri: formData.criminalRecordPhoto.uri,
+        // Algunos navegadores/emuladores usan mimeType, otros type
+        type: formData.criminalRecordPhoto.mimeType || "application/pdf",
+        name: formData.criminalRecordPhoto.name || "antecedentes.pdf",
+      } as any);
+    }
+
+    const response = await fetch(ENDPOINTS.register, {
+      method: "POST",
+      headers: {
+        // MUY IMPORTANTE: Al usar FormData con imágenes, 
+        // NO pongas 'Content-Type': 'application/json'. 
+        // Deja que el fetch asigne el boundary automáticamente.
+      },
+      body: data,
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || "Error al registrar niñera");
+    }
+
+    Alert.alert("¡Éxito!", "Tu registro ha sido enviado correctamente.", [
+      { text: "OK", onPress: () => router.replace("/login") }
+    ]);
+
+  } catch (error: any) {
+    Alert.alert("Error", error.message || "No se pudo conectar con el servidor");
+  } finally {
+    setLoading(false);
+  }
+}
   };
 
   const handleBack = () => {

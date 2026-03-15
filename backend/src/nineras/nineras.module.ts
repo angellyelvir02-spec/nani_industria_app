@@ -6,7 +6,7 @@ import { SupabaseModule } from '../supabase/supabase.module';
 
 @Module({
   imports: [SupabaseModule],
-  controllers: [NinerasController], // <-- ¿Está esto aquí?
+  controllers: [NinerasController], 
   providers: [NinerasService],
 })
 export class NinerasModule {}

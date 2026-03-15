@@ -11,5 +11,6 @@ export const ENDPOINTS = {
   register_cliente: `${API_URL}/auth/register/cliente`,
 
   get_nineras: `${API_URL}/nineras`,
+  get_perfil_ninera: `${API_URL}/nineras/usuario`,
   
 };

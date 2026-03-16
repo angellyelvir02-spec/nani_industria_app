@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Image,
   Modal,
@@ -10,6 +10,9 @@ import {
 } from "react-native";
 
 import { useRouter } from "expo-router";
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ENDPOINTS } from "../../../constants/apiConfig";
 
 import {
   Bell,
@@ -29,6 +32,7 @@ export default function BabysitterDashboard() {
   const [activeTab, setActiveTab] = useState("home");
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [userName, setUserName] = useState("Usuario");
 
   const stats = {
     todayBookings: 2,
@@ -71,6 +75,40 @@ export default function BabysitterDashboard() {
     setIsDetailsOpen(true);
   };
 
+  const fetchLoggedUser = async () => {
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+
+      if (!token) {
+        console.log("No hay token guardado");
+        return;
+      }
+
+      const response = await fetch(ENDPOINTS.me, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.log("Error trayendo usuario:", data);
+        return;
+      }
+
+      const nombre = data?.persona?.nombre || "Usuario";
+      setUserName(nombre);
+    } catch (error) {
+      console.log("Error fetchLoggedUser:", error);
+    }
+  };
+  useEffect(() => {
+    fetchLoggedUser();
+  }, []);
+
   return (
     <View style={styles.container}>
       {/* HEADER */}
@@ -78,7 +116,7 @@ export default function BabysitterDashboard() {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View>
-            <Text style={styles.hello}>Hola, María 👋</Text>
+            <Text style={styles.hello}>Hola, {userName} 👋</Text>
             <Text style={styles.sub}>
               Tienes {stats.todayBookings} reservas hoy
             </Text>

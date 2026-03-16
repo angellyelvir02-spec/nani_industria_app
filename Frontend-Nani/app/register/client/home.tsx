@@ -508,6 +508,7 @@
 //   },
 // });
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
@@ -553,7 +554,6 @@ type FilterType =
   | "Certificadas";
 
 interface HomeScreenProps {
-  userName: string;
   onViewProfile: (id: number) => void;
   onNavigate: (screen: string) => void;
 }
@@ -602,7 +602,6 @@ const BabysitterCard = ({ item, onViewProfile }: { item: Babysitter; onViewProfi
 
 // --- COMPONENTE PRINCIPAL ---
 export default function HomeScreen({
-  userName,
   onViewProfile,
   onNavigate,
 }: HomeScreenProps) {
@@ -610,6 +609,7 @@ export default function HomeScreen({
   const [selectedFilter, setSelectedFilter] = useState<FilterType>("Disponibles");
   const [babysitters, setBabysitters] = useState<Babysitter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState("Usuario");
 
   
   const fetchBabysitters = async () => {
@@ -647,9 +647,40 @@ export default function HomeScreen({
     setLoading(false);
   }
 };
+  const fetchLoggedUser = async () => {
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+
+      if (!token) {
+        console.log("No hay token guardado");
+        return;
+      }
+
+      const response = await fetch(ENDPOINTS.me, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.log("Error trayendo usuario logueado:", data);
+        return;
+      }
+
+      const nombre = data?.persona?.nombre || "Usuario";
+      setUserName(nombre);
+    } catch (error) {
+      console.log("Error fetchLoggedUser:", error);
+    }
+};
 
   useEffect(() => {
     fetchBabysitters();
+    fetchLoggedUser();
   }, []);
 
   const filteredBabysitters = useMemo(() => {

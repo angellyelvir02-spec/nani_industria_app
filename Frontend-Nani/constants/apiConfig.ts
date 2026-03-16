@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-const DEV_IP = '192.168.0.6'; 
+const DEV_IP = '192.168.0.17';
 const PORT = '3000';
 
 export const API_URL = `http://${DEV_IP}:${PORT}`;
@@ -12,5 +12,6 @@ export const ENDPOINTS = {
 
   get_nineras: `${API_URL}/nineras`,
   get_perfil_ninera: `${API_URL}/nineras/usuario`,
-  
+
+  me: `${API_URL}/auth/me`,
 };

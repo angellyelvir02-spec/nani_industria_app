@@ -59,6 +59,98 @@ export class AuthService {
       },
     };
   }
+  async getMe(token: string | null) {
+    const supabase = this.supabaseService.getPublicClient();
+    const admin = this.supabaseService.getAdminClient();
+    
+    if (!token) {
+      throw new UnauthorizedException('Token no enviado');
+    }
+  
+    const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  
+    if (authError || !authData.user) {
+      throw new UnauthorizedException('Token inválido o expirado');
+    }
+  
+    const authUserId = authData.user.id;
+  
+    const { data: usuario, error: usuarioError } = await admin
+      .from('usuario')
+      .select('id, auth_id, correo, rol, fecha_registro')
+      .eq('auth_id', authUserId)
+      .single();
+  
+    if (usuarioError || !usuario) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+  
+    if (usuario.rol === 'cliente') {
+      const { data: cliente, error: clienteError } = await admin
+        .from('cliente')
+        .select(`
+          id,
+          persona (
+            id,
+            nombre,
+            apellido,
+            telefono,
+            ubicacion,
+            foto_url
+          )
+        `)
+        .eq('usuario_id', usuario.id)
+        .single();
+        
+      if (clienteError || !cliente) {
+        throw new UnauthorizedException('Perfil de cliente no encontrado');
+      }
+    
+      return {
+        id: usuario.id,
+        auth_id: usuario.auth_id,
+        correo: usuario.correo,
+        rol: usuario.rol,
+        fecha_registro: usuario.fecha_registro,
+        persona: cliente.persona,
+      };
+    }
+  
+    if (usuario.rol === 'ninera') {
+      const { data: ninera, error: nineraError } = await admin
+        .from('ninera')
+        .select(`
+          id,
+          verificada,
+          persona (
+            id,
+            nombre,
+            apellido,
+            telefono,
+            ubicacion,
+            foto_url
+          )
+        `)
+        .eq('usuario_id', usuario.id)
+        .single();
+        
+      if (nineraError || !ninera) {
+        throw new UnauthorizedException('Perfil de niñera no encontrado');
+      }
+    
+      return {
+        id: usuario.id,
+        auth_id: usuario.auth_id,
+        correo: usuario.correo,
+        rol: usuario.rol,
+        fecha_registro: usuario.fecha_registro,
+        verificada: ninera.verificada,
+        persona: ninera.persona,
+      };
+    }
+  
+    throw new UnauthorizedException('Rol no válido');
+  }
 
  async registerNinera(dto: RegisterNineraDto, files: any) {
   const admin = this.supabaseService.getAdminClient();

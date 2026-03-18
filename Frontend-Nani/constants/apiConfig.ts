@@ -9,9 +9,9 @@ export const ENDPOINTS = {
   login: `${API_URL}/auth/login`,
   register: `${API_URL}/auth/register/ninera`,
   register_cliente: `${API_URL}/auth/register/cliente`,
-
   get_nineras: `${API_URL}/nineras`,
   get_perfil_ninera: `${API_URL}/nineras/usuario`,
-
   me: `${API_URL}/auth/me`,
+  get_reservas_ninera: (usuarioId: string) => `${API_URL}/reservas/ninera/${usuarioId}`,
+  update_foto_ninera: (usuarioId: string) => `${API_URL}/nineras/foto/${usuarioId}`,
 };

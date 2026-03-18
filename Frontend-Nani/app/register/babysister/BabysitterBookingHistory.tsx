@@ -1,5 +1,8 @@
+import React, { useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ENDPOINTS } from "../../../constants/apiConfig";
+
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import React, { useState } from "react";
 import {
     Image,
     ScrollView,
@@ -20,60 +23,65 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
   );
   const [searchQuery, setSearchQuery] = useState("");
 
-  const bookings = [
-    {
-      id: 1,
-      clientName: "Laura Pérez",
-      clientPhoto:
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330",
-      date: "Sábado, 8 Feb 2026",
-      time: "2:00 PM - 6:00 PM",
-      duration: 4,
-      children: 2,
-      payment: 60,
-      status: "completed",
-      rating: 5,
-    },
-    {
-      id: 2,
-      clientName: "Carlos Mendoza",
-      clientPhoto:
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d",
-      date: "Miércoles, 5 Feb 2026",
-      time: "3:00 PM - 7:00 PM",
-      duration: 4,
-      children: 1,
-      payment: 60,
-      status: "completed",
-      rating: 5,
-    },
-    {
-      id: 3,
-      clientName: "Ana Torres",
-      clientPhoto:
-        "https://images.unsplash.com/photo-1438761681033-6461ffad8d80",
-      date: "Viernes, 31 Ene 2026",
-      time: "10:00 AM - 2:00 PM",
-      duration: 4,
-      children: 3,
-      payment: 60,
-      status: "completed",
-      rating: 4,
-    },
-    {
-      id: 4,
-      clientName: "Roberto Silva",
-      clientPhoto:
-        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e",
-      date: "Lunes, 27 Ene 2026",
-      time: "9:00 AM - 1:00 PM",
-      duration: 4,
-      children: 2,
-      payment: 60,
-      status: "cancelled",
-      rating: null,
-    },
-  ];
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+
+      const userId = await AsyncStorage.getItem("userId");
+
+      if (!userId) {
+        console.log("No se encontró userId");
+        return;
+      }
+
+      const response = await fetch(ENDPOINTS.get_reservas_ninera(userId));
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.log("Error obteniendo reservas:", data);
+        return;
+      }
+
+      const mappedBookings = data.map((item: any) => {
+        const clientePersona = item.cliente?.persona;
+        const fecha = item.fecha_servicio || "";
+        const horaInicio = item.hora_inicio || "";
+        const horaFin = item.hora_fin || "";
+
+        return {
+          id: item.id,
+          clientName: clientePersona
+            ? `${clientePersona.nombre} ${clientePersona.apellido}`
+            : "Cliente",
+          clientPhoto:
+            clientePersona?.foto_url || "https://via.placeholder.com/150",
+          date: fecha,
+          time: `${horaInicio} - ${horaFin}`,
+          duration: item.duracion_horas || 0,
+          children: 0,
+          payment: 0,
+          status:
+            item.estado === "completada"
+              ? "completed"
+              : item.estado === "cancelada"
+              ? "cancelled"
+              : "completed",
+          rating: null,
+        };
+      });
+
+      setBookings(mappedBookings);
+    } catch (error) {
+      console.log("Error fetchBookings:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    fetchBookings();
+  }, []);
 
   const filteredBookings = bookings.filter((booking) => {
     const matchesFilter = filter === "all" || booking.status === filter;
@@ -91,6 +99,16 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
   const completedCount = bookings.filter(
     (b) => b.status === "completed",
   ).length;
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ textAlign: "center", marginTop: 50 }}>
+          Cargando reservas...
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

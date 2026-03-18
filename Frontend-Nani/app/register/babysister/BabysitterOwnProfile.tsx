@@ -19,6 +19,7 @@ import {
   Shield,
   Star,
 } from "lucide-react-native";
+import * as ImagePicker from "expo-image-picker";
 import {ENDPOINTS} from '../../../constants/apiConfig';
 
 
@@ -62,6 +63,64 @@ export default function BabysitterOwnProfile() {
       setLoading(false);
     }
   };
+  
+const handleChangePhoto = async () => {
+  try {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert("Permiso requerido", "Necesitamos acceso a tus fotos");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+    });
+
+    if (result.canceled) return;
+
+    const image = result.assets[0];
+
+    const userId = await AsyncStorage.getItem("userId");
+
+    if (!userId) {
+      Alert.alert("Error", "No se encontró el usuario");
+      return;
+    }
+
+    const formData = new FormData();
+    
+      formData.append("foto", {
+        uri: image.uri,
+        name: "foto.jpg",
+        type: "image/jpeg",
+      } as any);
+    
+      const response = await fetch(
+        ENDPOINTS.update_foto_ninera(userId),
+        {
+          method: "PATCH",
+          body: formData,
+        }
+      );
+    
+      const data = await response.json();
+    
+      if (!response.ok) {
+        console.log(data);
+        Alert.alert("Error", "No se pudo actualizar la foto");
+        return;
+      }
+    
+      Alert.alert("Éxito", "Foto actualizada");
+    
+      // 🔥 refresca el perfil
+      fetchProfileData();
+    } catch (error) {
+      console.log("Error al cambiar foto:", error);
+    }
+  };
 
   if (loading) {
     return (
@@ -79,10 +138,12 @@ export default function BabysitterOwnProfile() {
     <ScrollView style={styles.container}>
       {/* HEADER */}
       <View style={styles.headerContainer}>
-        <Image 
-          source={{ uri: profile.persona?.foto_url || "https://images.unsplash.com/photo-1584446456661-1039ed1a39d7?w=800" }} 
-          style={styles.headerImage} 
-        />
+        <TouchableOpacity onPress={handleChangePhoto}>
+          <Image 
+            source={{ uri: profile.persona?.foto_url || "https://images.unsplash.com/photo-1584446456661-1039ed1a39d7?w=800" }} 
+            style={styles.headerImage} 
+          />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <ArrowLeft size={20} color="#2E2E2E" />
         </TouchableOpacity>

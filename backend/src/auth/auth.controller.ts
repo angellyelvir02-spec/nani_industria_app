@@ -37,6 +37,7 @@ export class AuthController {
   @UseInterceptors(
     FileFieldsInterceptor(
       [
+        { name: 'foto_url', maxCount: 1 },
         { name: 'DNI_frontal_url', maxCount: 1 },
         { name: 'DNI_reverso_url', maxCount: 1 },
         { name: 'Antecedentes_penales_url', maxCount: 1 },
@@ -63,6 +64,7 @@ export class AuthController {
     @Body() dto: RegisterNineraDto,
     @UploadedFiles()
     files: {
+      foto_url: Express.Multer.File[];
       DNI_frontal_url: Express.Multer.File[];
       DNI_reverso_url: Express.Multer.File[];
       Antecedentes_penales_url: Express.Multer.File[];
@@ -73,10 +75,28 @@ export class AuthController {
 
   @Post('register/cliente')
   @UseInterceptors(
-    FileFieldsInterceptor([
-      { name: 'DNI_frontal_url', maxCount: 1 },
-      { name: 'foto_url', maxCount: 1 },
-    ]),
+    FileFieldsInterceptor(
+      [
+        { name: 'DNI_frontal_url', maxCount: 1 },
+        { name: 'foto_url', maxCount: 1 },
+      ],
+      {
+        limits: {
+          fileSize: 1024 * 1024 * 3,
+        },
+        fileFilter: (req, file, callback) => {
+          if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
+            return callback(
+              new BadRequestException(
+                'Solo se permiten archivos JPG, JPEG o PNG',
+              ),
+              false,
+            );
+          }
+          callback(null, true);
+        },
+      },
+    ),
   )
   async registerCliente(
     @Body() dto: RegisterClienteDto,

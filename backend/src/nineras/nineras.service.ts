@@ -79,6 +79,59 @@ export class NinerasService {
       throw new NotFoundException('No se encontró el perfil de la niñera');
     }
 
+
+
     return data;
+  }
+
+  async updateFotoPerfil(usuarioId: string, foto: Express.Multer.File) {
+    const client = this.supabaseService.getAdminClient();
+
+    if (!foto) {
+      throw new NotFoundException('No se recibió ninguna imagen');
+    }
+
+    const { data: ninera, error: nineraError } = await client
+      .from('ninera')
+      .select('id, persona_id')
+      .eq('usuario_id', usuarioId)
+      .single();
+
+    if (nineraError || !ninera) {
+      throw new NotFoundException('No se encontró la niñera');
+    }
+
+    const fileName = `perfil-${usuarioId}-${Date.now()}-${foto.originalname.replace(/\s/g, '_')}`;
+
+    const { error: uploadError } = await client.storage
+      .from('documentos')
+      .upload(fileName, foto.buffer, {
+        contentType: foto.mimetype,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new InternalServerErrorException(
+        `Error subiendo imagen: ${uploadError.message}`,
+      );
+    }
+
+    const publicUrl = client.storage.from('documentos').getPublicUrl(fileName).data.publicUrl;
+
+    const { error: updateError } = await client
+      .from('persona')
+      .update({ foto_url: publicUrl })
+      .eq('id', ninera.persona_id);
+
+    if (updateError) {
+      throw new InternalServerErrorException(
+        `Error actualizando foto: ${updateError.message}`,
+      );
+    }
+
+    return {
+      message: 'Foto de perfil actualizada correctamente',
+      foto_url: publicUrl,
+    };
   }
 }

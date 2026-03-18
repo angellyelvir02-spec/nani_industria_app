@@ -1,4 +1,13 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { NinerasService } from './nineras.service';
 
 @Controller('nineras')
@@ -10,8 +19,32 @@ export class NinerasController {
     return this.ninerasService.findAll();
   }
 
-  @Get('/usuario/:usuarioId') // La ruta será: /nineras/usuario/EL_ID_AQUÍ
+  @Get('/usuario/:usuarioId')
   async findByUsuario(@Param('usuarioId') usuarioId: string) {
     return await this.ninerasService.findOneByUsuario(usuarioId);
+  }
+
+  @Patch('/foto/:usuarioId')
+  @UseInterceptors(
+    FileInterceptor('foto', {
+      limits: {
+        fileSize: 1024 * 1024 * 3,
+      },
+      fileFilter: (req, file, callback) => {
+        if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
+          return callback(
+            new BadRequestException('Solo se permiten archivos JPG, JPEG o PNG'),
+            false,
+          );
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  async updateFotoPerfil(
+    @Param('usuarioId') usuarioId: string,
+    @UploadedFile() foto: Express.Multer.File,
+  ) {
+    return this.ninerasService.updateFotoPerfil(usuarioId, foto);
   }
 }

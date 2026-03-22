@@ -6,9 +6,12 @@ import {
   Patch,
   UploadedFile,
   UseInterceptors,
+  Query,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { NinerasService } from './nineras.service';
+import { Disponibilidad_reserva } from './dto/disponibilidad.dto';
 
 @Controller('nineras')
 export class NinerasController {
@@ -33,7 +36,9 @@ export class NinerasController {
       fileFilter: (req, file, callback) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
           return callback(
-            new BadRequestException('Solo se permiten archivos JPG, JPEG o PNG'),
+            new BadRequestException(
+              'Solo se permiten archivos JPG, JPEG o PNG',
+            ),
             false,
           );
         }
@@ -46,5 +51,24 @@ export class NinerasController {
     @UploadedFile() foto: Express.Multer.File,
   ) {
     return this.ninerasService.updateFotoPerfil(usuarioId, foto);
+  }
+
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    return await this.ninerasService.findOne(id);
+  }
+
+  //disponibilidad niñera
+  @Get(':id/availability')
+  async getAvailability(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('fecha') fecha: string,
+  ) {
+    const dto: Disponibilidad_reserva = {
+      nineraId: id,
+      fecha: fecha,
+    };
+
+    return this.ninerasService.getAvailableSlots(dto);
   }
 }

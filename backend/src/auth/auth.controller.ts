@@ -7,6 +7,7 @@ import {
   Req,
   UseInterceptors,
   UploadedFiles,
+  Headers,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { AuthService } from './auth.service';
@@ -24,11 +25,15 @@ export class AuthController {
   }
 
   @Get('me')
-  async getMe(@Req() req: any) {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ')
-      ? authHeader.substring(7)
-      : null;
+  async getMe(@Headers('authorization') auth: string) {
+    if (!auth) {
+      throw new BadRequestException(
+        'No se proporcionó el token de autorización',
+      );
+    }
+
+    // Extraemos el token de forma limpia (quedándonos solo con el hash)
+    const token = auth.replace('Bearer ', '').trim();
 
     return this.authService.getMe(token);
   }
@@ -73,23 +78,21 @@ export class AuthController {
     return this.authService.registerNinera(dto, files);
   }
 
+  // --- REGISTRO INICIAL (PASO 1) ---
   @Post('register/cliente')
   @UseInterceptors(
     FileFieldsInterceptor(
       [
         { name: 'DNI_frontal_url', maxCount: 1 },
+        { name: 'DNI_reverso_url', maxCount: 1 },
         { name: 'foto_url', maxCount: 1 },
       ],
       {
-        limits: {
-          fileSize: 1024 * 1024 * 3,
-        },
+        limits: { fileSize: 1024 * 1024 * 3 },
         fileFilter: (req, file, callback) => {
           if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
             return callback(
-              new BadRequestException(
-                'Solo se permiten archivos JPG, JPEG o PNG',
-              ),
+              new BadRequestException('Solo JPG, JPEG o PNG'),
               false,
             );
           }
@@ -100,12 +103,47 @@ export class AuthController {
   )
   async registerCliente(
     @Body() dto: RegisterClienteDto,
-    @UploadedFiles()
-    files: {
-      DNI_frontal_url: Express.Multer.File[];
-      foto_url: Express.Multer.File[];
-    },
+    @UploadedFiles() files: any,
   ) {
     return this.authService.registerCliente(dto, files);
+  }
+
+  // --- COMPLETAR PERFIL (PASO 2 - AQUÍ ESTABA EL ERROR) ---
+  @Post('complete-profile')
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'foto_url', maxCount: 1 },
+        { name: 'DNI_frontal_url', maxCount: 1 },
+        { name: 'DNI_reverso_url', maxCount: 1 },
+      ],
+      {
+        limits: { fileSize: 1024 * 1024 * 10 }, // Subimos a 10MB por si las fotos son pesadas
+        fileFilter: (req, file, callback) => {
+          if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
+            return callback(
+              new BadRequestException('Formato de imagen no válido'),
+              false,
+            );
+          }
+          callback(null, true);
+        },
+      },
+    ),
+  )
+  async completeProfile(
+    @Headers('authorization') auth: string,
+    @Body() dto: any,
+    @UploadedFiles() files: any,
+  ) {
+    if (!auth) throw new BadRequestException('No se proporcionó token');
+
+    const token = auth.replace('Bearer ', '');
+    const user = await this.authService.getMe(token);
+
+    if (!user) throw new BadRequestException('Token inválido o expirado');
+
+    // Pasamos todo al servicio
+    return this.authService.completeProfile(user.id, dto, files);
   }
 }

@@ -30,14 +30,16 @@ export class AuthService {
 
     const { data: usuario, error: usuarioError } = await admin
       .from('usuario')
-      .select(`
+      .select(
+        `
         id, 
         auth_id, 
         correo, 
         rol, 
         fecha_registro,
         ninera ( verificada )
-      `)
+      `,
+      )
       .eq('auth_id', authUserId)
       .single();
 
@@ -76,49 +78,48 @@ export class AuthService {
     const supabase = this.supabaseService.getPublicClient();
     const admin = this.supabaseService.getAdminClient();
 
-    if (!token) {
-      throw new UnauthorizedException('Token no enviado');
-    }
+    if (!token) throw new UnauthorizedException('Token no enviado');
 
+    // 1. Validar sesión en Supabase Auth
     const { data: authData, error: authError } =
       await supabase.auth.getUser(token);
 
     if (authError || !authData.user) {
-      throw new UnauthorizedException('Token inválido o expirado');
+      throw new UnauthorizedException('Sesión expirada o token inválido');
     }
 
-    const authUserId = authData.user.id;
-
+    // 2. Obtener el usuario base
     const { data: usuario, error: usuarioError } = await admin
       .from('usuario')
       .select('id, auth_id, correo, rol, fecha_registro')
-      .eq('auth_id', authUserId)
+      .eq('auth_id', authData.user.id)
       .single();
 
     if (usuarioError || !usuario) {
-      throw new UnauthorizedException('Usuario no encontrado');
+      throw new UnauthorizedException('Usuario no existe en la base de datos');
     }
 
+    // 3. Lógica para CLIENTE
     if (usuario.rol === 'cliente') {
-      const { data: cliente, error: clienteError } = await admin
+      const { data: cliente } = await admin
         .from('cliente')
-        .select(`
+        .select(
+          `
+        id,
+        persona:persona_id (
           id,
-          persona (
-            id,
-            nombre,
-            apellido,
-            telefono,
-            ubicacion,
-            foto_url
-          )
-        `)
+          nombre,
+          apellido,
+          foto_url,
+          telefono,
+          fecha_nacimiento,
+          DNI_frontal_url,
+          DNI_reverso_url
+        )
+      `,
+        )
         .eq('usuario_id', usuario.id)
-        .single();
-
-      if (clienteError || !cliente) {
-        throw new UnauthorizedException('Perfil de cliente no encontrado');
-      }
+        .maybeSingle();
 
       return {
         id: usuario.id,
@@ -126,31 +127,29 @@ export class AuthService {
         correo: usuario.correo,
         rol: usuario.rol,
         fecha_registro: usuario.fecha_registro,
-        persona: cliente.persona,
+        persona: cliente?.persona || null,
       };
     }
 
+    // 4. Lógica para NIÑERA
     if (usuario.rol === 'ninera') {
-      const { data: ninera, error: nineraError } = await admin
+      const { data: ninera } = await admin
         .from('ninera')
-        .select(`
+        .select(
+          `
+        id,
+        verificada,
+        persona:persona_id (
           id,
-          verificada,
-          persona (
-            id,
-            nombre,
-            apellido,
-            telefono,
-            ubicacion,
-            foto_url
-          )
-        `)
+          nombre,
+          apellido,
+          telefono,
+          foto_url
+        )
+      `,
+        )
         .eq('usuario_id', usuario.id)
-        .single();
-
-      if (nineraError || !ninera) {
-        throw new UnauthorizedException('Perfil de niñera no encontrado');
-      }
+        .maybeSingle();
 
       return {
         id: usuario.id,
@@ -158,12 +157,20 @@ export class AuthService {
         correo: usuario.correo,
         rol: usuario.rol,
         fecha_registro: usuario.fecha_registro,
-        verificada: ninera.verificada,
-        persona: ninera.persona,
+        verificada: ninera?.verificada || false,
+        persona: ninera?.persona || null,
       };
     }
 
-    throw new UnauthorizedException('Rol no válido');
+    // 5. Fallback
+    return {
+      id: usuario.id,
+      auth_id: usuario.auth_id,
+      correo: usuario.correo,
+      rol: usuario.rol,
+      fecha_registro: usuario.fecha_registro,
+      persona: null,
+    };
   }
 
   async registerNinera(dto: RegisterNineraDto, files: any) {
@@ -171,10 +178,12 @@ export class AuthService {
 
     const uploadFile = async (file: Express.Multer.File, bucket: string) => {
       const fileName = `${Date.now()}-${file.originalname.replace(/\s/g, '_')}`;
-      const { error } = await admin.storage.from(bucket).upload(fileName, file.buffer, {
-        contentType: file.mimetype,
-        upsert: true,
-      });
+      const { error } = await admin.storage
+        .from(bucket)
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+          upsert: true,
+        });
 
       if (error) {
         throw new BadRequestException(
@@ -279,7 +288,9 @@ export class AuthService {
 
     const normalizeInput = (input: any) => {
       if (!input) return [];
-      return Array.isArray(input) ? input : input.split(',').map((i) => i.trim());
+      return Array.isArray(input)
+        ? input
+        : input.split(',').map((i) => i.trim());
     };
 
     const listaHabilidades = normalizeInput(dto.habilidades);
@@ -316,32 +327,32 @@ export class AuthService {
   async registerCliente(dto: RegisterClienteDto, files: any) {
     const admin = this.supabaseService.getAdminClient();
 
-    const uploadFile = async (file: Express.Multer.File, bucket: string) => {
-      const fileName = `cliente-${Date.now()}-${file.originalname.replace(/\s/g, '_')}`;
+    const uploadFile = async (file: any, bucket: string) => {
+      if (!file || !file[0]) return null;
+      const fileData = file[0];
+      const fileName = `cliente-${Date.now()}-${fileData.originalname?.replace(/\s/g, '_') || 'archivo'}`;
+
       const { error } = await admin.storage
         .from(bucket)
-        .upload(fileName, file.buffer, {
-          contentType: file.mimetype,
+        .upload(fileName, fileData.buffer, {
+          contentType: fileData.mimetype,
           upsert: true,
         });
 
-      if (error) {
+      if (error)
         throw new BadRequestException(`Error storage: ${error.message}`);
-      }
-
       return admin.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
     };
 
-    let urlFoto = '';
-    let urlDni = '';
+    // 1. Subida opcional de archivos (Paso 1)
+    const urlFoto = await uploadFile(files?.foto_url, 'documentos');
+    const urlDni = await uploadFile(files?.DNI_frontal_url, 'documentos');
+    const urlDniReverso = await uploadFile(
+      files?.DNI_reverso_url,
+      'documentos',
+    );
 
-    if (files?.foto_url) {
-      urlFoto = await uploadFile(files.foto_url[0], 'documentos');
-    }
-    if (files?.DNI_frontal_url) {
-      urlDni = await uploadFile(files.DNI_frontal_url[0], 'documentos');
-    }
-
+    // 2. Creación en Auth de Supabase
     const { data: authCreated, error: authError } =
       await admin.auth.admin.createUser({
         email: dto.correo,
@@ -351,10 +362,11 @@ export class AuthService {
 
     if (authError || !authCreated.user) {
       throw new BadRequestException(
-        authError?.message || 'No se pudo crear el cliente en Auth',
+        authError?.message || 'No se pudo crear el usuario',
       );
     }
 
+    // 3. Insertar en tabla 'usuario'
     const { data: usuario, error: uError } = await admin
       .from('usuario')
       .insert({
@@ -365,36 +377,172 @@ export class AuthService {
       .select()
       .single();
 
-    if (uError) {
-      throw new BadRequestException(uError.message);
-    }
+    if (uError) throw new BadRequestException(uError.message);
 
+    // 4. Insertar en tabla 'persona' (direccion_id inicia en null)
     const { data: persona, error: pError } = await admin
       .from('persona')
       .insert({
         nombre: dto.nombre,
         apellido: dto.apellido,
-        telefono: dto.telefono,
-        ubicacion: dto.ubicacion,
-        foto_url: urlFoto || null,
-        DNI_frontal_url: urlDni || null,
+        telefono: dto.telefono || null,
+        id_direccion: null, // Se llena hasta el segundo formulario
+        fecha_nacimiento: dto.fecha_nacimiento || null,
+        foto_url: urlFoto,
+        DNI_frontal_url: urlDni,
+        DNI_reverso_url: urlDniReverso,
       })
       .select()
       .single();
 
-    if (pError) {
-      throw new BadRequestException(pError.message);
-    }
+    if (pError) throw new BadRequestException(pError.message);
 
+    // 5. Vincular en tabla 'cliente'
     const { error: cError } = await admin.from('cliente').insert({
       persona_id: persona.id,
       usuario_id: usuario.id,
     });
 
-    if (cError) {
-      throw new BadRequestException(cError.message);
+    if (cError) throw new BadRequestException(cError.message);
+
+    return {
+      message: 'Cliente registrado con éxito',
+      userId: authCreated.user.id,
+    };
+  }
+
+  async completeProfile(userId: string, dto: any, files: any) {
+    const admin = this.supabaseService.getAdminClient();
+
+    const uploadFile = async (file: any, bucket: string, prefix: string) => {
+      if (!file || !file[0]) return null;
+      const fileData = file[0];
+      const fileName = `${prefix}-${userId}-${Date.now()}`;
+
+      const { error } = await admin.storage
+        .from(bucket)
+        .upload(fileName, fileData.buffer, {
+          contentType: fileData.mimetype,
+          upsert: true,
+        });
+
+      if (error)
+        throw new BadRequestException(
+          `Error subiendo ${prefix}: ${error.message}`,
+        );
+      return admin.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
+    };
+
+    // 1. Subida de archivos (Se mantiene igual)
+    const urlFotoPerfil = await uploadFile(
+      files?.foto_url,
+      'perfiles',
+      'avatar',
+    );
+    const urlDniFrontal = await uploadFile(
+      files?.DNI_frontal_url,
+      'documentos',
+      'dni-f',
+    );
+    const urlDniReverso = await uploadFile(
+      files?.DNI_reverso_url,
+      'documentos',
+      'dni-r',
+    );
+
+    // 2. Obtener el cliente y su persona_id
+    const { data: cliente, error: clientError } = await admin
+      .from('cliente')
+      .select('id, persona_id')
+      .eq('usuario_id', userId)
+      .single();
+
+    if (clientError || !cliente)
+      throw new BadRequestException('Cliente no encontrado');
+
+    // 3. Gestión de Dirección (Se mantiene igual)
+    let direccionId = null;
+    if (dto.direccion || dto.ubicacion) {
+      const coords = dto.ubicacion?.split(',') || [];
+      const lat = coords[0] ? parseFloat(coords[0]) : null;
+      const lng = coords[1] ? parseFloat(coords[1]) : null;
+
+      const { data: personaActual } = await admin
+        .from('persona')
+        .select('id_direccion')
+        .eq('id', cliente.persona_id)
+        .single();
+
+      if (personaActual?.id_direccion) {
+        await admin
+          .from('direccion')
+          .update({
+            direccion_completa: dto.direccion,
+            punto_referencia: dto.punto_referencia,
+            latitud: lat,
+            longitud: lng,
+          })
+          .eq('id', personaActual.id_direccion);
+        direccionId = personaActual.id_direccion;
+      } else {
+        const { data: nuevaDir } = await admin
+          .from('direccion')
+          .insert({
+            direccion_completa: dto.direccion,
+            punto_referencia: dto.punto_referencia,
+            latitud: lat,
+            longitud: lng,
+          })
+          .select('id')
+          .single();
+        direccionId = nuevaDir?.id;
+      }
     }
 
-    return { message: 'Cliente registrado con éxito' };
+    // 4. Actualizar tabla 'persona'
+    const { error: updateError } = await admin
+      .from('persona')
+      .update({
+        telefono: dto.telefono,
+        id_direccion: direccionId,
+        fecha_nacimiento: dto.fecha_nacimiento,
+        ...(urlFotoPerfil && { foto_url: urlFotoPerfil }),
+        ...(urlDniFrontal && { DNI_frontal_url: urlDniFrontal }),
+        ...(urlDniReverso && { DNI_reverso_url: urlDniReverso }),
+      })
+      .eq('id', cliente.persona_id);
+
+    if (updateError)
+      throw new BadRequestException(
+        `Error al actualizar perfil: ${updateError.message}`,
+      );
+
+    // --- NUEVO: GESTIÓN DE NIÑOS ---
+    if (dto.ninos) {
+      try {
+        // Parseamos el string que viene del FormData
+        const listaNinos =
+          typeof dto.ninos === 'string' ? JSON.parse(dto.ninos) : dto.ninos;
+
+        if (Array.isArray(listaNinos) && listaNinos.length > 0) {
+          const ninosInsert = listaNinos.map((n: any) => ({
+            cliente_id: cliente.id,
+            nombre: n.nombre,
+            edad: parseInt(n.edad),
+            nota: n.nota || null,
+          }));
+
+          const { error: ninosError } = await admin
+            .from('nino')
+            .insert(ninosInsert);
+          if (ninosError)
+            console.error('Error guardando niños:', ninosError.message);
+        }
+      } catch (e) {
+        console.error('Error al procesar JSON de niños:', e.message);
+      }
+    }
+
+    return { message: 'Perfil de Nani completado con éxito' };
   }
 }

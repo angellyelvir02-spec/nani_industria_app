@@ -19,4 +19,7 @@ export class RegisterNineraDto {
 
   presentacion: string;
   experiencia?: string | null;
+  dia_semana: string;
+  hora_inicio: string;
+  hora_fin: string;
 }

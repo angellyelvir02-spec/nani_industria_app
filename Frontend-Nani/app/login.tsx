@@ -1,11 +1,11 @@
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {ENDPOINTS} from '../constants/apiConfig';
 import {
-  Alert,
   ActivityIndicator,
+  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ENDPOINTS } from '../constants/apiConfig';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -24,70 +24,91 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // NUEVO: Estados para los errores visuales
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  // NUEVO: Funciones de validación individual (OnBlur)
+  const validateEmail = () => {
+    const emailLimpio = email.trim().toLowerCase();
+    if (!emailLimpio) {
+      setEmailError("Ingresa tu correo electrónico.");
+      return false;
+    } else if (!emailLimpio.endsWith("@gmail.com") && !emailLimpio.endsWith("@icloud.com")) {
+      setEmailError("Solo aceptamos correos @gmail.com o @icloud.com.");
+      return false;
+    }
+    return true;
+  };
+
+  const validatePassword = () => {
+    if (!password) {
+      setPasswordError("Ingresa tu contraseña.");
+      return false;
+    }
+    return true;
+  };
+
   const handleLogin = async () => {
-  if (!email || !password) {
-    Alert.alert("Error", "Completa el correo y la contraseña");
-    return;
-  }
+    // Validamos todo junto antes de enviar
+    const isEmailValid = validateEmail();
+    const isPasswordValid = validatePassword();
 
-  try {
-    setLoading(true);
-
-    const response = await fetch(ENDPOINTS.login, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        correo: email,
-        password: password,
-      }),
-    });
-
-    const data = await response.json();
-
-    // 1. MANEJO DE ERRORES DEL BACKEND (401, 404, etc.)
-    if (!response.ok) {
-      // Aquí entrará si el backend lanza UnauthorizedException (Contraseña mal o usuario no existe)
-      // O si el perfil de la niñera aún no está verificado.
-      Alert.alert("Atención", data.message || "No se pudo iniciar sesión");
-      return;
+    if (!isEmailValid || !isPasswordValid) {
+      return; // Detenemos la ejecución si hay errores
     }
 
-    // 2. GUARDAR DATOS Y REDIRECCIÓN
     try {
-      // Verificamos que data.user exista para evitar el error de "undefined"
-      if (data.user && data.user.id) {
-        await AsyncStorage.setItem("userId", data.user.id.toString());
-        await AsyncStorage.setItem("userRole", data.user.rol);
+      setLoading(true);
 
-        if (data.session?.access_token) {
-          await AsyncStorage.setItem("userToken", data.session.access_token);
-        }
+      const response = await fetch(ENDPOINTS.login, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          correo: email.trim().toLowerCase(), // Enviamos limpio al backend
+          password: password,
+        }),
+      });
 
-        // Redirección basada en el rol
-        if (data.user.rol === 'ninera') {
-          router.replace("/register/babysister/BabysitterDashboard");
-        } else if (data.user.rol === 'cliente') {
-          router.replace("/register/client/home");
-        } else {
-          router.replace("/");
-        }
-      } else {
-        throw new Error("El servidor no devolvió los datos del usuario");
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert("Atención", data.message || "Credenciales incorrectas");
+        return;
       }
-    } catch (storageError) {
-      console.error("Error al guardar sesión", storageError);
-      Alert.alert("Error", "No se pudo guardar la sesión en el dispositivo");
+
+      try {
+        if (data.user && data.user.id) {
+          await AsyncStorage.setItem("userId", data.user.id.toString());
+          await AsyncStorage.setItem("userRole", data.user.rol);
+
+          if (data.session?.access_token) {
+            await AsyncStorage.setItem("userToken", data.session.access_token);
+          }
+
+          if (data.user.rol === 'ninera') {
+            router.replace("/register/babysister/BabysitterDashboard");
+          } else if (data.user.rol === 'cliente') {
+            router.replace("/register/client/home");
+          } else {
+            router.replace("/");
+          }
+        } else {
+          throw new Error("El servidor no devolvió los datos del usuario");
+        }
+      } catch (storageError) {
+        console.error("Error al guardar sesión", storageError);
+        Alert.alert("Error", "No se pudo guardar la sesión en el dispositivo");
+      }
+    } catch (error) {
+      Alert.alert("Error de red", "No se pudo conectar con el servidor. Verifica tu conexión.");
+      console.log(error);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    // Error de red (servidor apagado, sin internet)
-    Alert.alert("Error", "No se pudo conectar con el servidor");
-    console.log(error);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   return (
     <LinearGradient colors={["#FF7A8A", "#8B6CCB"]} style={styles.container}>
@@ -108,27 +129,38 @@ export default function LoginScreen() {
 
           {/* EMAIL */}
           <Text style={styles.label}>Correo electrónico</Text>
-          <View style={styles.inputContainer}>
-            <MaterialIcons name="email" size={20} color="#9CA3AF" />
+          <View style={[styles.inputContainer, emailError && styles.inputError]}>
+            <MaterialIcons name="email" size={20} color={emailError ? "#EF4444" : "#9CA3AF"} />
             <TextInput
-              placeholder="tu@email.com"
+              placeholder="tu@gmail.com"
               placeholderTextColor="#9CA3AF"
               value={email}
-              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              onChangeText={(text) => {
+                setEmail(text);
+                if (emailError) setEmailError(null); // Borra el error al escribir
+              }}
+              onBlur={validateEmail} // Valida al salir de la cajita
               style={styles.input}
             />
           </View>
+          {emailError && <Text style={styles.errorText}>{emailError}</Text>}
 
           {/* PASSWORD */}
           <Text style={styles.label}>Contraseña</Text>
-          <View style={styles.inputContainer}>
-            <Feather name="lock" size={20} color="#9CA3AF" />
+          <View style={[styles.inputContainer, passwordError && styles.inputError]}>
+            <Feather name="lock" size={20} color={passwordError ? "#EF4444" : "#9CA3AF"} />
             <TextInput
               placeholder="••••••••"
               placeholderTextColor="#9CA3AF"
               secureTextEntry={!showPassword}
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (passwordError) setPasswordError(null);
+              }}
+              onBlur={validatePassword}
               style={styles.input}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
@@ -139,6 +171,7 @@ export default function LoginScreen() {
               />
             </TouchableOpacity>
           </View>
+          {passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
 
           {/* FORGOT */}
           <TouchableOpacity style={styles.forgot}>
@@ -147,14 +180,14 @@ export default function LoginScreen() {
 
           {/* BUTTON */}
           <TouchableOpacity
-            style={styles.loginButton}
+            style={[styles.loginButton, loading && { opacity: 0.7 }]}
             onPress={handleLogin}
             disabled={loading}
           >
             {loading ? (
-             <ActivityIndicator color="white" />
+              <ActivityIndicator color="white" />
             ) : (
-            <Text style={styles.loginText}>Iniciar sesión</Text>
+              <Text style={styles.loginText}>Iniciar sesión</Text>
             )}
           </TouchableOpacity>
 
@@ -190,135 +223,35 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: 20,
-  },
-  logoContainer: {
-    alignItems: "center",
-    marginBottom: 30,
-  },
-  logo: {
-    width: 160,
-    height: 160,
-    resizeMode: "contain",
-  },
-  subtitle: {
-    color: "white",
-    marginTop: 10,
-    fontSize: 14,
-    opacity: 0.9,
-  },
-  card: {
-    backgroundColor: "white",
-    borderRadius: 32,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
-    textAlign: "center",
-    color: "#111827",
-  },
-  description: {
-    textAlign: "center",
-    color: "#6B7280",
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 13,
-    color: "#374151",
-    marginBottom: 6,
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F9FAFB",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 14,
-    gap: 10,
-  },
-  input: {
-    flex: 1,
-    fontSize: 14,
-    color: "#111827",
-  },
-  forgot: {
-    alignItems: "flex-end",
-    marginBottom: 16,
-  },
-  forgotText: {
-    fontSize: 12,
-    color: "#8B6CCB",
-  },
-  loginButton: {
-    backgroundColor: "#FF7A8A",
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  loginText: {
-    color: "white",
-    fontWeight: "700",
-    fontSize: 15,
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E5E7EB",
-  },
-  dividerText: {
-    marginHorizontal: 8,
-    fontSize: 12,
-    color: "#6B7280",
-  },
-  googleButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 16,
-    paddingVertical: 12,
-    gap: 10,
-    marginBottom: 16,
-  },
-  googleIcon: {
-    width: 18,
-    height: 18,
-  },
-  googleText: {
-    fontSize: 14,
-    color: "#111827",
-    fontWeight: "500",
-  },
-  register: {
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-  registerText: {
-    fontSize: 13,
-    color: "#6B7280",
-  },
-  registerLink: {
-    fontSize: 13,
-    color: "#8B6CCB",
-    fontWeight: "600",
-  },
+  container: { flex: 1 },
+  scroll: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 20 },
+  logoContainer: { alignItems: "center", marginBottom: 30 },
+  logo: { width: 160, height: 160, resizeMode: "contain" },
+  subtitle: { color: "white", marginTop: 10, fontSize: 14, opacity: 0.9 },
+  card: { backgroundColor: "white", borderRadius: 32, padding: 24, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 20, elevation: 8 },
+  title: { fontSize: 22, fontWeight: "700", textAlign: "center", color: "#111827" },
+  description: { textAlign: "center", color: "#6B7280", marginBottom: 20 },
+  label: { fontSize: 13, color: "#374151", marginBottom: 6, marginTop: 4 },
+  
+  // Modificado: Quitamos el marginBottom de aquí para manejarlo dinámicamente con el error
+  inputContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#F9FAFB", borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
+  input: { flex: 1, fontSize: 14, color: "#111827" },
+  
+  forgot: { alignItems: "flex-end", marginBottom: 16, marginTop: 8 },
+  forgotText: { fontSize: 12, color: "#8B6CCB" },
+  loginButton: { backgroundColor: "#FF7A8A", borderRadius: 16, paddingVertical: 14, alignItems: "center", marginBottom: 16, height: 50, justifyContent: 'center' },
+  loginText: { color: "white", fontWeight: "700", fontSize: 15 },
+  divider: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
+  line: { flex: 1, height: 1, backgroundColor: "#E5E7EB" },
+  dividerText: { marginHorizontal: 8, fontSize: 12, color: "#6B7280" },
+  googleButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 16, paddingVertical: 12, gap: 10, marginBottom: 16 },
+  googleIcon: { width: 18, height: 18 },
+  googleText: { fontSize: 14, color: "#111827", fontWeight: "500" },
+  register: { flexDirection: "row", justifyContent: "center" },
+  registerText: { fontSize: 13, color: "#6B7280" },
+  registerLink: { fontSize: 13, color: "#8B6CCB", fontWeight: "600" },
+
+  // ESTILOS NUEVOS PARA LOS ERRORES
+  errorText: { color: "#EF4444", fontSize: 12, marginTop: 4, marginLeft: 4, marginBottom: 10 },
+  inputError: { borderColor: "#EF4444", borderWidth: 1 },
 });

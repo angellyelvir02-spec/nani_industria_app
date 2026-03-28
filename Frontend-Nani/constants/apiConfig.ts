@@ -36,4 +36,6 @@ export const ENDPOINTS = {
   //llamado de niños en reserva
   get_mis_ninos: `${API_URL}/clientes/mis-ninos`,
   get_metodo_pago: `${API_URL}/reservas/metodos-pago`,
+
+  save_disponibilidad_ninera: `${API_URL}/disponibilidad/ninera`,
 };

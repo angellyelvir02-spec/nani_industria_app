@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Image,
   Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -33,41 +35,51 @@ export default function BabysitterDashboard() {
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [userName, setUserName] = useState("Usuario");
+  const [pendingBookings, setPendingBookings] = useState<any[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(true);
+
+  const [isAvailabilityOpen, setIsAvailabilityOpen] = useState(false);
+  const [savingAvailability, setSavingAvailability] = useState(false);
+
+  const [availabilityForm, setAvailabilityForm] = useState({
+    dia: "",
+    hora_inicio: "",
+    hora_fin: "",
+  });
+
+  const [availabilityList, setAvailabilityList] = useState<any[]>([]);
 
   const stats = {
-    todayBookings: 2,
     monthEarnings: 2450,
     rating: 4.9,
     newMessages: 3,
   };
 
-  const todayBookings = [
-    {
-      id: 1,
-      clientName: "Laura Pérez",
-      clientPhoto:
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200",
-      time: "2:00 PM - 6:00 PM",
-      children: 2,
-      address: "Calle Principal 123",
-      payment: 60,
-      paymentMethod: "Tarjeta",
-      childrenDetails: "Emma (5 años) y Lucas (3 años)",
-      notes: "Alergia al maní en Emma",
-    },
-    {
-      id: 2,
-      clientName: "Carlos Mendoza",
-      clientPhoto:
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200",
-      time: "7:00 PM - 10:00 PM",
-      children: 1,
-      address: "Av. Central 456",
-      payment: 45,
-      paymentMethod: "Efectivo",
-      childrenDetails: "Sofía (7 años)",
-      notes: "Debe cenar a las 7:30 PM",
-    },
+  const DAYS = [
+    "Lunes",
+    "Martes",
+    "Miércoles",
+    "Jueves",
+    "Viernes",
+    "Sábado",
+    "Domingo",
+  ];
+
+  const HOURS = [
+    "07:00",
+    "08:00",
+    "09:00",
+    "10:00",
+    "11:00",
+    "12:00",
+    "13:00",
+    "14:00",
+    "15:00",
+    "16:00",
+    "17:00",
+    "18:00",
+    "19:00",
+    "20:00",
   ];
 
   const handleShowDetails = (booking: any) => {
@@ -105,20 +117,206 @@ export default function BabysitterDashboard() {
       console.log("Error fetchLoggedUser:", error);
     }
   };
+
+  const fetchPendingBookings = async () => {
+    try {
+      setLoadingBookings(true);
+
+      const userId = await AsyncStorage.getItem("userId");
+
+      if (!userId) {
+        console.log("No se encontró userId");
+        return;
+      }
+
+      const response = await fetch(ENDPOINTS.get_reservas_ninera(userId));
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.log("Error obteniendo reservas:", data);
+        return;
+      }
+
+      const mappedBookings = data.map((item: any) => {
+        const clientePersona = item.cliente?.persona;
+        const fecha = item.fecha_servicio || "";
+        const horaInicio = item.hora_inicio || "";
+        const horaFin = item.hora_fin || "";
+
+        return {
+          id: item.id,
+          clientName: clientePersona
+            ? `${clientePersona.nombre} ${clientePersona.apellido}`
+            : "Cliente",
+          clientPhoto:
+            clientePersona?.foto_url || "https://via.placeholder.com/150",
+          date: fecha,
+          time: `${horaInicio} - ${horaFin}`,
+          duration: item.duracion_horas || 0,
+          children: item.reserva_nino?.length || 0,
+          payment: item.monto_total || 0,
+          status: item.estado || "pendiente",
+          address:
+            item.direccion?.direccion_completa ||
+            item.direccion?.punto_referencia ||
+            "Dirección no disponible",
+          paymentMethod: item.metodo_pago?.nombre || "No especificado",
+          childrenDetails: "Pendiente",
+          notes: item.notas_importantes || "Sin notas",
+        };
+      });
+
+      const onlyPending = mappedBookings.filter(
+        (booking: any) => booking.status === "pendiente"
+      );
+
+      setPendingBookings(onlyPending);
+    } catch (error) {
+      console.log("Error fetchPendingBookings:", error);
+    } finally {
+      setLoadingBookings(false);
+    }
+  };
+
   useEffect(() => {
     fetchLoggedUser();
+    fetchPendingBookings();
   }, []);
+
+  const handleAvailabilityInputChange = (
+    field: "dia" | "hora_inicio" | "hora_fin",
+    value: string
+  ) => {
+    setAvailabilityForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const addAvailabilityItem = () => {
+    const { dia, hora_inicio, hora_fin } = availabilityForm;
+
+    if (!dia || !hora_inicio || !hora_fin) {
+      Alert.alert("Campos incompletos", "Selecciona día, hora inicio y hora fin.");
+      return;
+    }
+
+    if (!DAYS.includes(dia)) {
+      Alert.alert("Día inválido", "Selecciona un día válido.");
+      return;
+    }
+
+    if (!HOURS.includes(hora_inicio) || !HOURS.includes(hora_fin)) {
+      Alert.alert("Hora inválida", "Selecciona horas válidas.");
+      return;
+    }
+
+    if (hora_inicio >= hora_fin) {
+      Alert.alert(
+        "Horario inválido",
+        "La hora fin debe ser mayor que la hora inicio."
+      );
+      return;
+    }
+
+    const alreadyExists = availabilityList.some(
+      (item) =>
+        item.dia_semana === dia &&
+        item.hora_inicio === hora_inicio &&
+        item.hora_fin === hora_fin
+    );
+
+    if (alreadyExists) {
+      Alert.alert("Duplicado", "Ese horario ya fue agregado.");
+      return;
+    }
+
+    setAvailabilityList((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        dia_semana: dia,
+        hora_inicio,
+        hora_fin,
+      },
+    ]);
+
+    setAvailabilityForm({
+      dia: "",
+      hora_inicio: "",
+      hora_fin: "",
+    });
+  };
+
+  const removeAvailabilityItem = (id: string) => {
+    setAvailabilityList((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const closeAvailabilityModal = () => {
+    setIsAvailabilityOpen(false);
+    setAvailabilityForm({
+      dia: "",
+      hora_inicio: "",
+      hora_fin: "",
+    });
+  };
+
+  const saveAvailability = async () => {
+    try {
+      if (availabilityList.length === 0) {
+        Alert.alert("Sin registros", "Agrega al menos un horario.");
+        return;
+      }
+
+      setSavingAvailability(true);
+
+      const userId = await AsyncStorage.getItem("userId");
+
+      if (!userId) {
+        Alert.alert("Error", "No se encontró el userId.");
+        return;
+      }
+
+      const response = await fetch(ENDPOINTS.save_disponibilidad_ninera, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          usuario_id: userId,
+          disponibilidad: availabilityList.map(({ id, ...rest }) => rest),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "No se pudo guardar la disponibilidad");
+      }
+
+      Alert.alert("Éxito", "Disponibilidad guardada correctamente");
+      setAvailabilityList([]);
+      setAvailabilityForm({
+        dia: "",
+        hora_inicio: "",
+        hora_fin: "",
+      });
+      setIsAvailabilityOpen(false);
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Error guardando disponibilidad");
+    } finally {
+      setSavingAvailability(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
-
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View>
             <Text style={styles.hello}>Hola, {userName} 👋</Text>
             <Text style={styles.sub}>
-              Tienes {stats.todayBookings} reservas hoy
+              Tienes {pendingBookings.length} reservas sin confirmar
             </Text>
           </View>
 
@@ -132,8 +330,6 @@ export default function BabysitterDashboard() {
             </View>
           </TouchableOpacity>
         </View>
-
-        {/* STATS */}
 
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
@@ -156,57 +352,74 @@ export default function BabysitterDashboard() {
         </View>
       </View>
 
-      {/* CONTENT */}
-
       <ScrollView style={styles.content}>
-        <Text style={styles.sectionTitle}>Reservas de hoy</Text>
+        <Text style={styles.sectionTitle}>Reservas sin confirmar</Text>
 
-        {todayBookings.map((booking) => (
-          <View key={booking.id} style={styles.bookingCard}>
-            <View style={styles.bookingRow}>
-              <Image
-                source={{ uri: booking.clientPhoto }}
-                style={styles.avatar}
-              />
+        {loadingBookings ? (
+          <Text style={{ color: "#666", marginBottom: 12 }}>
+            Cargando reservas...
+          </Text>
+        ) : pendingBookings.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>
+              No tienes reservas sin confirmar por ahora.
+            </Text>
+          </View>
+        ) : (
+          pendingBookings.map((booking) => (
+            <View key={booking.id} style={styles.bookingCard}>
+              <View style={styles.bookingRow}>
+                <Image
+                  source={{ uri: booking.clientPhoto }}
+                  style={styles.avatar}
+                />
 
-              <View style={{ flex: 1 }}>
-                <Text style={styles.clientName}>{booking.clientName}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.clientName}>{booking.clientName}</Text>
 
-                <View style={styles.row}>
-                  <Clock size={14} color="#666" />
-                  <Text style={styles.timeText}>{booking.time}</Text>
+                  <View style={styles.row}>
+                    <Clock size={14} color="#666" />
+                    <Text style={styles.timeText}>
+                      {booking.date} | {booking.time}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.address}>{booking.address}</Text>
+
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity style={styles.acceptBtn}>
+                      <QrCode size={14} color="white" />
+                      <Text style={styles.acceptText}>Aceptar</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.detailsBtn}
+                      onPress={() => handleShowDetails(booking)}
+                    >
+                      <Text>Detalles</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
-                <Text style={styles.address}>{booking.address}</Text>
-
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity style={styles.acceptBtn}>
-                    <QrCode size={14} color="white" />
-                    <Text style={styles.acceptText}>Aceptar</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.detailsBtn}
-                    onPress={() => handleShowDetails(booking)}
-                  >
-                    <Text>Detalles</Text>
-                  </TouchableOpacity>
+                <View style={styles.paymentBox}>
+                  <Text style={styles.payment}>${booking.payment}</Text>
+                  <Text style={styles.children}>{booking.children} niños</Text>
                 </View>
-              </View>
-
-              <View style={styles.paymentBox}>
-                <Text style={styles.payment}>${booking.payment}</Text>
-                <Text style={styles.children}>{booking.children} niños</Text>
               </View>
             </View>
-          </View>
-        ))}
-
-        {/* QUICK ACTIONS */}
+          ))
+        )}
 
         <Text style={styles.sectionTitle}>Acciones rápidas</Text>
 
         <View style={styles.quickGrid}>
+          <TouchableOpacity
+            style={styles.quickCard}
+            onPress={() => setIsAvailabilityOpen(true)}
+          >
+            <Clock color="#886BC1" />
+            <Text style={styles.quickTitle}>Disponibilidad</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.quickCard}
             onPress={() => router.push("./BabysitterOwnProfile")}
@@ -240,8 +453,6 @@ export default function BabysitterDashboard() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-
-      {/* NAVBAR */}
 
       <View style={styles.navbar}>
         <TouchableOpacity
@@ -277,8 +488,6 @@ export default function BabysitterDashboard() {
         </TouchableOpacity>
       </View>
 
-      {/* MODAL */}
-
       <Modal visible={isDetailsOpen} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modal}>
@@ -298,6 +507,14 @@ export default function BabysitterDashboard() {
                 </Text>
 
                 <Text style={styles.modalText}>
+                  Fecha: {selectedBooking.date}
+                </Text>
+
+                <Text style={styles.modalText}>
+                  Hora: {selectedBooking.time}
+                </Text>
+
+                <Text style={styles.modalText}>
                   Dirección: {selectedBooking.address}
                 </Text>
 
@@ -306,7 +523,11 @@ export default function BabysitterDashboard() {
                 </Text>
 
                 <Text style={styles.modalText}>
-                  Niños: {selectedBooking.childrenDetails}
+                  Método de pago: {selectedBooking.paymentMethod}
+                </Text>
+
+                <Text style={styles.modalText}>
+                  Notas: {selectedBooking.notes}
                 </Text>
               </View>
             )}
@@ -317,6 +538,134 @@ export default function BabysitterDashboard() {
             >
               <Text style={{ color: "white" }}>Entendido</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={isAvailabilityOpen} transparent animationType="fade">   
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modal}>
+            <TouchableOpacity
+              style={styles.close}
+              onPress={closeAvailabilityModal}
+            >
+              <X />
+            </TouchableOpacity>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingTop: 10, paddingBottom: 10 }}
+            >
+              <Text style={styles.modalTitle}>Gestionar disponibilidad</Text>
+
+              <Text style={styles.inputLabel}>Día</Text>
+              <View style={styles.optionsWrap}>
+                {DAYS.map((day) => (
+                  <TouchableOpacity
+                    key={day}
+                    style={[
+                      styles.optionChip,
+                      availabilityForm.dia === day && styles.optionChipActive,
+                    ]}
+                    onPress={() => handleAvailabilityInputChange("dia", day)}
+                  >
+                    <Text
+                      style={[
+                        styles.optionChipText,
+                        availabilityForm.dia === day && styles.optionChipTextActive,
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              
+              <Text style={styles.inputLabel}>Hora inicio</Text>
+              <View style={styles.optionsWrap}>
+                {HOURS.map((hour) => (
+                  <TouchableOpacity
+                    key={`start-${hour}`}
+                    style={[
+                      styles.optionChip,
+                      availabilityForm.hora_inicio === hour && styles.optionChipActive,
+                    ]}
+                    onPress={() => handleAvailabilityInputChange("hora_inicio", hour)}
+                  >
+                    <Text
+                      style={[
+                        styles.optionChipText,
+                        availabilityForm.hora_inicio === hour &&
+                          styles.optionChipTextActive,
+                      ]}
+                    >
+                      {hour}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              
+              <Text style={styles.inputLabel}>Hora fin</Text>
+              <View style={styles.optionsWrap}>
+                {HOURS.map((hour) => (
+                  <TouchableOpacity
+                    key={`end-${hour}`}
+                    style={[
+                      styles.optionChip,
+                      availabilityForm.hora_fin === hour && styles.optionChipActive,
+                    ]}
+                    onPress={() => handleAvailabilityInputChange("hora_fin", hour)}
+                  >
+                    <Text
+                      style={[
+                        styles.optionChipText,
+                        availabilityForm.hora_fin === hour &&
+                          styles.optionChipTextActive,
+                      ]}
+                    >
+                      {hour}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              
+              <TouchableOpacity
+                style={styles.addAvailabilityBtn}
+                onPress={addAvailabilityItem}
+              >
+                <Text style={styles.addAvailabilityBtnText}>Agregar horario</Text>
+              </TouchableOpacity>
+              
+              <ScrollView style={{ maxHeight: 180, marginTop: 12 }}>
+                {availabilityList.map((item) => (
+                  <View key={item.id} style={styles.availabilityItem}>
+                    <View>
+                      <Text style={styles.availabilityText}>{item.dia_semana}</Text>
+                      <Text style={styles.availabilitySubText}>
+                        {item.hora_inicio} - {item.hora_fin}
+                      </Text>
+                    </View>
+                
+                    <TouchableOpacity onPress={() => removeAvailabilityItem(item.id)}>
+                      <Text style={styles.removeText}>Quitar</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+              
+              <TouchableOpacity
+                style={[
+                  styles.okBtn,
+                  savingAvailability && { opacity: 0.7 },
+                ]}
+                onPress={saveAvailability}
+                disabled={savingAvailability}
+              >
+                <Text style={{ color: "white" }}>
+                  {savingAvailability ? "Guardando..." : "Guardar disponibilidad"}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -391,6 +740,18 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
+  emptyCard: {
+    backgroundColor: "white",
+    padding: 18,
+    borderRadius: 20,
+    marginBottom: 16,
+  },
+
+  emptyText: {
+    color: "#666",
+    textAlign: "center",
+  },
+
   bookingRow: { flexDirection: "row", gap: 10 },
 
   avatar: { width: 55, height: 55, borderRadius: 30 },
@@ -463,6 +824,7 @@ const styles = StyleSheet.create({
   modal: {
     backgroundColor: "white",
     width: "85%",
+    maxHeight: "80%",
     borderRadius: 20,
     padding: 20,
   },
@@ -479,5 +841,95 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  close: { position: "absolute", right: 10, top: 10 },
+  inputLabel: {
+    marginTop: 10,
+    marginBottom: 6,
+    color: "#555",
+    fontSize: 13,
+  },
+
+  input: {
+    backgroundColor: "#F3F4F6",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+
+  addAvailabilityBtn: {
+    backgroundColor: "#886BC1",
+    padding: 10,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 8,
+  },
+
+  addAvailabilityBtnText: {
+    color: "white",
+    fontWeight: "bold",
+  },
+
+  availabilityItem: {
+    backgroundColor: "#F7F7F7",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  availabilityText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  availabilitySubText: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 2,
+  },
+
+  removeText: {
+    color: "#FF768A",
+    fontWeight: "bold",
+  },
+
+  optionsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
+  },
+
+  optionChip: {
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+
+  optionChipActive: {
+    backgroundColor: "#886BC1",
+  },
+
+  optionChipText: {
+    color: "#555",
+    fontSize: 13,
+  },
+
+  optionChipTextActive: {
+    color: "white",
+    fontWeight: "bold",
+  },
+
+  close: {
+    position: "absolute",
+    right: 10,
+    top: 10,
+    zIndex: 10,
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 4,
+  },
 });

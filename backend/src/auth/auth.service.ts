@@ -175,7 +175,7 @@ export class AuthService {
 
   async registerNinera(dto: RegisterNineraDto, files: any) {
     const admin = this.supabaseService.getAdminClient();
-
+    
     const uploadFile = async (file: Express.Multer.File, bucket: string) => {
       const fileName = `${Date.now()}-${file.originalname.replace(/\s/g, '_')}`;
       const { error } = await admin.storage
@@ -184,52 +184,55 @@ export class AuthService {
           contentType: file.mimetype,
           upsert: true,
         });
-
+      
       if (error) {
         throw new BadRequestException(
           `Error subiendo archivo: ${error.message}`,
         );
       }
-
+    
       return admin.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
     };
-
+  
     let urlFoto = '';
     let urlFrontal = '';
-    let urlReverso = '';
     let urlAntecedentes = '';
-
+  
+    // ✅ foto de perfil
     if (files?.foto_url) {
       urlFoto = await uploadFile(files.foto_url[0], 'documentos');
     }
+  
+    // ✅ dni frontal
     if (files?.DNI_frontal_url) {
       urlFrontal = await uploadFile(files.DNI_frontal_url[0], 'documentos');
     }
-    if (files?.DNI_reverso_url) {
-      urlReverso = await uploadFile(files.DNI_reverso_url[0], 'documentos');
-    }
+  
+    // ✅ antecedentes
     if (files?.Antecedentes_penales_url) {
       urlAntecedentes = await uploadFile(
         files.Antecedentes_penales_url[0],
         'documentos',
       );
     }
-
+  
+    // 1. Crear usuario en Auth
     const { data: authCreated, error: authError } =
       await admin.auth.admin.createUser({
         email: dto.correo,
         password: dto.password,
         email_confirm: true,
       });
-
+    
     if (authError || !authCreated.user) {
       throw new BadRequestException(
         authError?.message || 'No se pudo crear el usuario en Auth',
       );
     }
-
+  
     const authUserId = authCreated.user.id;
-
+  
+    // 2. Crear usuario en tabla usuario
     const { data: usuario, error: usuarioError } = await admin
       .from('usuario')
       .insert({
@@ -239,80 +242,119 @@ export class AuthService {
       })
       .select()
       .single();
-
+    
     if (usuarioError) {
       throw new BadRequestException(
         `Error en tabla usuario: ${usuarioError.message}`,
       );
     }
-
+  
+    // 3. Crear dirección
+    const { data: direccion, error: direccionError } = await admin
+      .from('direccion')
+      .insert({
+        direccion_completa: dto.ubicacion,
+        latitud: 0,
+        longitud: 0,
+        punto_referencia: null,
+      })
+      .select()
+      .single();
+    
+    if (direccionError) {
+      throw new BadRequestException(
+        `Error en tabla direccion: ${direccionError.message}`,
+      );
+    }
+  
+    // 4. Crear persona
     const { data: persona, error: personaError } = await admin
       .from('persona')
       .insert({
         nombre: dto.nombre,
         apellido: dto.apellido,
         telefono: dto.telefono,
-        ubicacion: dto.ubicacion,
+        id_direccion: direccion.id,
         fecha_nacimiento: dto.fecha_nacimiento || null,
         foto_url: urlFoto || null,
-        DNI_frontal_url: urlFrontal,
-        DNI_reverso_url: urlReverso,
+        DNI_frontal_url: urlFrontal || null,
+        DNI_reverso_url: null,
       })
       .select()
       .single();
-
+    
     if (personaError) {
       throw new BadRequestException(
         `Error en tabla persona: ${personaError.message}`,
       );
     }
-
+  
+    // 5. Crear niñera
     const { data: ninera, error: nineraError } = await admin
       .from('ninera')
       .insert({
         persona_id: persona.id,
         usuario_id: usuario.id,
-        presentacion: dto.presentacion,
+        presentacion: dto.presentacion ?? null,
         experiencia: dto.experiencia ?? null,
-        Antecedentes_penales_url: urlAntecedentes,
+        Antecedentes_penales_url: urlAntecedentes || null,
         tarifa: Number(dto.tarifa),
+        verificada: false,
       })
       .select()
       .single();
-
+    
     if (nineraError) {
       throw new BadRequestException(
         `Error en tabla ninera: ${nineraError.message}`,
       );
     }
-
+  
     const normalizeInput = (input: any) => {
       if (!input) return [];
       return Array.isArray(input)
         ? input
-        : input.split(',').map((i) => i.trim());
+        : input.split(',').map((i: string) => i.trim()).filter(Boolean);
     };
-
+  
+    // 6. Habilidades
     const listaHabilidades = normalizeInput(dto.habilidades);
     if (listaHabilidades.length > 0) {
-      const insertHabs = listaHabilidades.map((h) => ({
+      const insertHabs = listaHabilidades.map((h: string) => ({
         ninera_id: ninera.id,
         nombre: h,
       }));
-      await admin.from('habilidad_ninera').insert(insertHabs);
+    
+      const { error: habError } = await admin
+        .from('habilidad_ninera')
+        .insert(insertHabs);
+    
+      if (habError) {
+        throw new BadRequestException(
+          `Error en habilidades: ${habError.message}`,
+        );
+      }
     }
-
-    const listaCerts = normalizeInput(
-      dto.certificaciones || (dto as any).certificados,
-    );
+  
+    // 7. Certificaciones
+    const listaCerts = normalizeInput(dto.certificaciones);
     if (listaCerts.length > 0) {
-      const insertCerts = listaCerts.map((c) => ({
+      const insertCerts = listaCerts.map((c: string) => ({
         ninera_id: ninera.id,
         nombre: c,
       }));
-      await admin.from('certificaciones_ninera').insert(insertCerts);
+    
+      const { error: certError } = await admin
+        .from('certificaciones_ninera')
+        .insert(insertCerts);
+    
+      if (certError) {
+        throw new BadRequestException(
+          `Error en certificaciones: ${certError.message}`,
+        );
+      }
     }
-
+  
     return {
       message:
         'Niñera registrada correctamente. Recibirás un correo para el siguiente paso',
@@ -320,6 +362,8 @@ export class AuthService {
         auth_id: authUserId,
         usuario_id: usuario.id,
         ninera_id: ninera.id,
+        persona_id: persona.id,
+        direccion_id: direccion.id,
       },
     };
   }

@@ -44,22 +44,29 @@ export class AuthController {
       [
         { name: 'foto_url', maxCount: 1 },
         { name: 'DNI_frontal_url', maxCount: 1 },
-        { name: 'DNI_reverso_url', maxCount: 1 },
         { name: 'Antecedentes_penales_url', maxCount: 1 },
       ],
       {
         limits: {
-          fileSize: 1024 * 1024 * 3,
+          fileSize: 1024 * 1024 * 10,
         },
         fileFilter: (req, file, callback) => {
-          if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
+          const allowedMimeTypes = [
+            'image/jpeg',
+            'image/jpg',
+            'image/png',
+            'application/pdf',
+          ];
+        
+          if (!allowedMimeTypes.includes(file.mimetype)) {
             return callback(
               new BadRequestException(
-                'Solo se permiten archivos JPG, JPEG o PNG',
+                'Solo se permiten archivos JPG, JPEG, PNG o PDF',
               ),
               false,
             );
           }
+        
           callback(null, true);
         },
       },
@@ -69,10 +76,9 @@ export class AuthController {
     @Body() dto: RegisterNineraDto,
     @UploadedFiles()
     files: {
-      foto_url: Express.Multer.File[];
-      DNI_frontal_url: Express.Multer.File[];
-      DNI_reverso_url: Express.Multer.File[];
-      Antecedentes_penales_url: Express.Multer.File[];
+      foto_url?: Express.Multer.File[];
+      DNI_frontal_url?: Express.Multer.File[];
+      Antecedentes_penales_url?: Express.Multer.File[];
     },
   ) {
     return this.authService.registerNinera(dto, files);

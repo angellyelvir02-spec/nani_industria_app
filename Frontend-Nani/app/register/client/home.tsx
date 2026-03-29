@@ -507,6 +507,7 @@
 //     backgroundColor: "#FF768A",
 //   },
 // });
+/*
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useMemo, useState, useCallback } from "react";
@@ -812,7 +813,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           />
         )}
 
-        {/* Nav Inferior */}
+        {/* Nav Inferior *//*}
         <View style={styles.bottomNav}>
           <TouchableOpacity style={styles.navItem}>
             <Ionicons name="home" size={22} color="#886BC1" />
@@ -986,4 +987,300 @@ const styles = StyleSheet.create({
     color: "#886BC1",
     fontWeight: "600",
   },
+});
+*/
+import { Feather, FontAwesome, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { ENDPOINTS } from "../../../constants/apiConfig";
+
+// --- COMPONENTES INTERNOS ---
+
+const BabysitterCard = ({ item, onViewProfile }: { item: any; onViewProfile: (id: number) => void }) => (
+  <View style={styles.card}>
+    <View style={styles.cardTop}>
+      <View style={styles.imageWrapper}>
+        <Image source={{ uri: item.photo }} style={styles.avatar} />
+        {item.isOnline && <View style={styles.onlineDot} />}
+      </View>
+      <View style={styles.cardInfo}>
+        <Text style={styles.name}>{item.name}</Text>
+        <View style={styles.row}>
+          <FontAwesome name="star" size={14} color="#FF768A" />
+          <Text style={styles.ratingText}>{item.rating}</Text>
+          <Text style={styles.experienceText}>• {item.experience}</Text>
+        </View>
+        <View style={styles.row}>
+          <Ionicons name="location-outline" size={13} color="#8D8D8D" />
+          <Text style={styles.locationText} numberOfLines={1}>{item.location}</Text>
+        </View>
+        <View style={styles.row}>
+          <Ionicons name="time-outline" size={13} color="#886BC1" />
+          <Text style={styles.priceText}>L {item.hourlyRate}/hora</Text>
+        </View>
+      </View>
+    </View>
+    <TouchableOpacity
+      style={styles.profileButton}
+      onPress={() => onViewProfile(item.id)}
+      activeOpacity={0.8}
+    >
+      <Text style={styles.profileButtonText}>Ver perfil</Text>
+    </TouchableOpacity>
+  </View>
+);
+
+export default function HomeScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
+  const [searchText, setSearchText] = useState("");
+  const [selectedFilter, setSelectedFilter] = useState("Disponibles");
+  const [babysitters, setBabysitters] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState("Usuario");
+  const router = useRouter();
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchLoggedUser();
+      fetchBabysitters();
+    }, [])
+  );
+
+  const fetchLoggedUser = async () => {
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+      if (!token) return;
+      const response = await fetch(ENDPOINTS.me, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        const nombreReal = data?.persona?.nombre || data?.nombre || "Usuario";
+        setUserName(nombreReal);
+      }
+    } catch (error) {
+      console.error("Error al obtener usuario:", error);
+    }
+  };
+
+  const fetchBabysitters = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(ENDPOINTS.get_nineras);
+      const data = await response.json();
+      if (!response.ok) throw new Error();
+
+      const mappedData = data.map((item: any) => ({
+        id: item.id,
+        name: item.persona ? `${item.persona.nombre} ${item.persona.apellido}` : "Niñera",
+        photo: item.persona?.foto_url || "https://via.placeholder.com/150",
+        rating: 5.0,
+        hourlyRate: item.tarifa || 0,
+        experience: item.experiencia || "Sin experiencia",
+        location: item.persona?.direccion?.direccion_completa || "Ubicación no disponible",
+        isOnline: true,
+        isAvailable: true,
+        certified: item.verificada || false,
+      }));
+      setBabysitters(mappedData);
+    } catch (error) {
+      Alert.alert("Error de conexión", "No pudimos cargar las niñeras. Desliza hacia abajo para reintentar.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- VALIDACIÓN DE PERFIL ANTES DE NAVEGAR ---
+  const handlePressProfile = async (id: number) => {
+    setLoading(true);
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+      const response = await fetch(ENDPOINTS.me, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const userData = await response.json();
+
+      const frontal = userData?.persona?.DNI_frontal_url;
+      const reverso = userData?.persona?.DNI_reverso_url;
+
+      // Validación estricta: Si no hay documentos, no entra al perfil
+      if (!frontal || frontal.length < 10 || !reverso || reverso.length < 10) {
+        Alert.alert(
+          "Perfil Incompleto 🛡️",
+          "Por seguridad, debes subir fotos legibles de tu DNI antes de contactar a una niñera.",
+          [
+            { text: "Completar ahora", onPress: () => router.push("/register/client/ClientRegistrationForm2") },
+            { text: "Más tarde", style: "cancel" },
+          ]
+        );
+        return;
+      }
+
+      const nani = babysitters.find((b) => b.id === id);
+      if (nani) {
+        router.push({
+          pathname: "/register/client/BabysitterProfile",
+          params: { babysitterId: nani.id, name: nani.name, photo: nani.photo, hourlyRate: nani.hourlyRate },
+        });
+      }
+    } catch (error) {
+      Alert.alert("Error", "No pudimos validar tu acceso. Inténtalo de nuevo.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredBabysitters = useMemo(() => {
+    return babysitters.filter((item) =>
+      item.name.toLowerCase().includes(searchText.toLowerCase()) ||
+      item.location.toLowerCase().includes(searchText.toLowerCase())
+    );
+  }, [babysitters, searchText]);
+
+  const renderHeader = () => (
+    <LinearGradient colors={["#886BC1", "#FF768A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.header}>
+      <Text style={styles.greeting}>¡Hola, {userName}! 👋</Text>
+      <View style={styles.searchContainer}>
+        <Feather name="search" size={20} color="#A0A0A0" style={styles.searchIcon} />
+        <TextInput
+          placeholder="Buscar por nombre o ciudad..."
+          placeholderTextColor="#A0A0A0"
+          style={styles.searchInput}
+          value={searchText}
+          onChangeText={setSearchText}
+        />
+      </View>
+      <View style={styles.filtersRow}>
+        {["Disponibles", "Cerca de ti"].map((filter) => (
+          <TouchableOpacity
+            key={filter}
+            style={[styles.filterChip, selectedFilter === filter && styles.filterChipActive]}
+            onPress={() => setSelectedFilter(filter)}
+          >
+            <Text style={styles.filterText}>{filter}</Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity style={styles.filterIconButton}>
+          <MaterialIcons name="tune" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+    </LinearGradient>
+  );
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" />
+      <View style={styles.container}>
+        {loading && babysitters.length === 0 ? (
+          <View style={styles.loaderContainer}>
+            <ActivityIndicator size="large" color="#886BC1" />
+            <Text style={styles.loaderText}>Buscando a tu Nani ideal...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredBabysitters}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => <BabysitterCard item={item} onViewProfile={handlePressProfile} />}
+            ListHeaderComponent={
+              <View>
+                {renderHeader()}
+                <View style={styles.content}>
+                  <Text style={styles.sectionTitle}>
+                    {searchText ? `Resultados para "${searchText}"` : "Niñeras en tu zona"}
+                  </Text>
+                </View>
+              </View>
+            }
+            ListEmptyComponent={
+              !loading ? (
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="search-outline" size={60} color="#D1D5DB" />
+                  <Text style={styles.emptyText}>No encontramos niñeras con esos criterios.</Text>
+                </View>
+              ) : null
+            }
+            ListFooterComponent={<View style={{ height: 100 }} />}
+            onRefresh={fetchBabysitters}
+            refreshing={loading}
+          />
+        )}
+
+        {/* Navigation Bar */}
+        <View style={styles.bottomNav}>
+          <TouchableOpacity style={styles.navItem}>
+            <Ionicons name="home" size={24} color="#886BC1" />
+            <Text style={[styles.navText, { color: "#886BC1" }]}>Inicio</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem} onPress={() => onNavigate("bookings")}>
+            <Ionicons name="calendar-outline" size={24} color="#B0B0B0" />
+            <Text style={styles.navText}>Reservas</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem} onPress={() => onNavigate("chat")}>
+            <View>
+              <Ionicons name="chatbubbles-outline" size={24} color="#B0B0B0" />
+              <View style={styles.notificationDot} />
+            </View>
+            <Text style={styles.navText}>Chat</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem} onPress={() => onNavigate("profile")}>
+            <Ionicons name="person-outline" size={24} color="#B0B0B0" />
+            <Text style={styles.navText}>Perfil</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#FAFAFA" },
+  container: { flex: 1 },
+  header: { padding: 20, paddingTop: 30, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
+  greeting: { color: "#FFF", fontSize: 24, fontWeight: "bold", marginBottom: 15 },
+  searchContainer: { backgroundColor: "#FFF", borderRadius: 15, height: 50, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, marginBottom: 15 },
+  searchIcon: { marginRight: 10 },
+  searchInput: { flex: 1, fontSize: 15 },
+  filtersRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  filterChip: { backgroundColor: "rgba(255,255,255,0.2)", paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 },
+  filterChipActive: { backgroundColor: "rgba(255,255,255,0.4)" },
+  filterText: { color: "#FFF", fontWeight: "600" },
+  filterIconButton: { backgroundColor: "rgba(255,255,255,0.2)", padding: 8, borderRadius: 10 },
+  content: { padding: 20 },
+  sectionTitle: { fontSize: 18, fontWeight: "bold", color: "#374151" },
+  card: { backgroundColor: "#FFF", marginHorizontal: 20, marginBottom: 15, borderRadius: 20, padding: 15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+  cardTop: { flexDirection: "row", gap: 15 },
+  avatar: { width: 70, height: 70, borderRadius: 35 },
+  imageWrapper: { position: 'relative' },
+  onlineDot: { position: 'absolute', bottom: 2, right: 2, width: 15, height: 15, borderRadius: 7.5, backgroundColor: '#22C55E', borderWidth: 2, borderColor: '#FFF' },
+  cardInfo: { flex: 1 },
+  name: { fontSize: 17, fontWeight: "bold", color: "#1F2937" },
+  row: { flexDirection: "row", alignItems: "center", marginTop: 4 },
+  ratingText: { marginLeft: 5, fontWeight: "600", color: "#374151" },
+  experienceText: { marginLeft: 5, color: "#6B7280" },
+  locationText: { marginLeft: 5, color: "#6B7280", flex: 1 },
+  priceText: { marginLeft: 5, color: "#886BC1", fontWeight: "bold" },
+  profileButton: { backgroundColor: "#FF768A", marginTop: 15, padding: 12, borderRadius: 15, alignItems: "center" },
+  profileButtonText: { color: "#FFF", fontWeight: "bold" },
+  loaderContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loaderText: { marginTop: 10, color: "#886BC1", fontWeight: "600" },
+  emptyContainer: { flex: 1, alignItems: "center", marginTop: 50 },
+  emptyText: { marginTop: 10, color: "#9CA3AF" },
+  bottomNav: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 15, backgroundColor: "#FFF", borderTopLeftRadius: 25, borderTopRightRadius: 25, elevation: 20 },
+  navItem: { alignItems: "center" },
+  navText: { fontSize: 11, marginTop: 4, color: "#B0B0B0" },
+  notificationDot: { position: 'absolute', top: 0, right: 0, width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF768A' }
 });

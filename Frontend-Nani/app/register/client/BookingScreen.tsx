@@ -44,7 +44,9 @@ export default function BookingScreen() {
   );
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedStartTime, setSelectedStartTime] = useState<string | null>(null);
+  const [selectedStartTime, setSelectedStartTime] = useState<string | null>(
+    null,
+  );
   const [selectedEndTime, setSelectedEndTime] = useState<string | null>(null);
   const [ninos, setNinos] = useState<Nino[]>([]);
   const [selectedNinos, setSelectedNinos] = useState<string[]>([]);
@@ -53,7 +55,9 @@ export default function BookingScreen() {
 
   // ESTADOS PAGO
   const [metodosPago, setMetodosPago] = useState<MetodoPago[]>([]);
-  const [metodoSeleccionado, setMetodoSeleccionado] = useState<string | null>(null);
+  const [metodoSeleccionado, setMetodoSeleccionado] = useState<string | null>(
+    null,
+  );
   const [isConfirming, setIsConfirming] = useState(false);
 
   const babysitter = {
@@ -91,8 +95,10 @@ export default function BookingScreen() {
   const calendarDays = useMemo(() => {
     const days = [];
     const formatterFull = new Intl.DateTimeFormat("es-ES", { weekday: "long" });
-    const formatterInicial = new Intl.DateTimeFormat("es-ES", { weekday: "narrow" });
-    for (let i = 0; i < 7; i++) {
+    const formatterInicial = new Intl.DateTimeFormat("es-ES", {
+      weekday: "narrow",
+    });
+    for (let i = 0; i < 30; i++) {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
       d.setDate(d.getDate() + i);
@@ -141,7 +147,7 @@ export default function BookingScreen() {
     if (!selectedStartTime || !selectedEndTime) return 0;
     const start = parseInt(selectedStartTime.split(":")[0]);
     const end = parseInt(selectedEndTime.split(":")[0]);
-    return end - start;
+    return end - start + 1;
   }, [selectedStartTime, selectedEndTime]);
 
   const { subtotal, fee, total } = useMemo(() => {
@@ -154,26 +160,40 @@ export default function BookingScreen() {
   const handleConfirmarReserva = async () => {
     // 1. Validación de Niños
     if (selectedNinos.length === 0) {
-      return Alert.alert("Información faltante", "Por favor, selecciona al menos un niño para el servicio.");
+      return Alert.alert(
+        "Información faltante",
+        "Por favor, selecciona al menos un niño para el servicio.",
+      );
     }
 
     // 2. Validación de Horas
     if (!selectedStartTime || !selectedEndTime) {
-      return Alert.alert("Selección de tiempo", "Debes elegir un rango de horas (inicio y fin).");
+      return Alert.alert(
+        "Selección de tiempo",
+        "Debes elegir un rango de horas (inicio y fin).",
+      );
     }
 
     // 3. Validación de Conflictos (Verificar si hay horas ocupadas en medio del rango)
-    const startIdx = timeSlots.findIndex(s => s.time === selectedStartTime);
-    const endIdx = timeSlots.findIndex(s => s.time === selectedEndTime);
-    const rangeConflict = timeSlots.slice(startIdx, endIdx + 1).some(slot => slot.status !== "available");
+    const startIdx = timeSlots.findIndex((s) => s.time === selectedStartTime);
+    const endIdx = timeSlots.findIndex((s) => s.time === selectedEndTime);
+    const rangeConflict = timeSlots
+      .slice(startIdx, endIdx + 1)
+      .some((slot) => slot.status !== "available");
 
     if (rangeConflict) {
-      return Alert.alert("Horario no disponible", "El rango seleccionado incluye horas que ya están reservadas. Por favor ajusta tu selección.");
+      return Alert.alert(
+        "Horario no disponible",
+        "El rango seleccionado incluye horas que ya están reservadas. Por favor ajusta tu selección.",
+      );
     }
 
     // 4. Validación de Pago
     if (!metodoSeleccionado) {
-      return Alert.alert("Método de pago", "Selecciona un método de pago para continuar.");
+      return Alert.alert(
+        "Método de pago",
+        "Selecciona un método de pago para continuar.",
+      );
     }
 
     setIsConfirming(true);
@@ -246,19 +266,30 @@ export default function BookingScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <View style={styles.headerRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.headerBackButton}
+            >
               <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Nueva Reserva</Text>
           </View>
         </View>
 
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+        >
           <View style={styles.babysitterCard}>
-            <Image source={{ uri: babysitter.photo }} style={styles.babysitterImage} />
+            <Image
+              source={{ uri: babysitter.photo }}
+              style={styles.babysitterImage}
+            />
             <View>
               <Text style={styles.babysitterName}>{babysitter.name}</Text>
-              <Text style={styles.babysitterRate}>L {babysitter.hourlyRate.toFixed(2)}/hora</Text>
+              <Text style={styles.babysitterRate}>
+                L {babysitter.hourlyRate.toFixed(2)}/hora
+              </Text>
             </View>
           </View>
 
@@ -272,19 +303,37 @@ export default function BookingScreen() {
                 {ninos.map((nino) => (
                   <TouchableOpacity
                     key={nino.id}
-                    style={[styles.ninoChip, selectedNinos.includes(nino.id) && styles.ninoChipSelected]}
+                    style={[
+                      styles.ninoChip,
+                      selectedNinos.includes(nino.id) &&
+                        styles.ninoChipSelected,
+                    ]}
                     onPress={() =>
                       setSelectedNinos((prev) =>
-                        prev.includes(nino.id) ? prev.filter((i) => i !== nino.id) : [...prev, nino.id]
+                        prev.includes(nino.id)
+                          ? prev.filter((i) => i !== nino.id)
+                          : [...prev, nino.id],
                       )
                     }
                   >
                     <Ionicons
-                      name={selectedNinos.includes(nino.id) ? "checkbox" : "square-outline"}
+                      name={
+                        selectedNinos.includes(nino.id)
+                          ? "checkbox"
+                          : "square-outline"
+                      }
                       size={18}
-                      color={selectedNinos.includes(nino.id) ? "#FFF" : "#886BC1"}
+                      color={
+                        selectedNinos.includes(nino.id) ? "#FFF" : "#886BC1"
+                      }
                     />
-                    <Text style={[styles.ninoText, selectedNinos.includes(nino.id) && styles.ninoTextSelected]}>
+                    <Text
+                      style={[
+                        styles.ninoText,
+                        selectedNinos.includes(nino.id) &&
+                          styles.ninoTextSelected,
+                      ]}
+                    >
                       {nino.nombre}
                     </Text>
                   </TouchableOpacity>
@@ -310,22 +359,41 @@ export default function BookingScreen() {
           {/* Calendario */}
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitlePlain}>Selecciona el día</Text>
-            <View style={styles.daysRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.daysScrollContainer}
+            >
               {calendarDays.map((item) => (
                 <TouchableOpacity
                   key={item.fechaFull}
-                  style={[styles.dayButton, item.fechaFull === selectedDate && styles.dayButtonSelected]}
+                  style={[
+                    styles.dayButton,
+                    item.fechaFull === selectedDate && styles.dayButtonSelected,
+                  ]}
                   onPress={() => setSelectedDate(item.fechaFull)}
                 >
-                  <Text style={[styles.dayInitialText, item.fechaFull === selectedDate && styles.dayButtonTextSelected]}>
+                  <Text
+                    style={[
+                      styles.dayInitialText,
+                      item.fechaFull === selectedDate &&
+                        styles.dayButtonTextSelected,
+                    ]}
+                  >
                     {item.inicial}
                   </Text>
-                  <Text style={[styles.dayButtonText, item.fechaFull === selectedDate && styles.dayButtonTextSelected]}>
+                  <Text
+                    style={[
+                      styles.dayButtonText,
+                      item.fechaFull === selectedDate &&
+                        styles.dayButtonTextSelected,
+                    ]}
+                  >
                     {item.numero}
                   </Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
           </View>
 
           {/* Horas */}
@@ -355,7 +423,9 @@ export default function BookingScreen() {
                     <Text
                       style={[
                         styles.slotText,
-                        (slot.time === selectedStartTime || slot.time === selectedEndTime) && styles.slotTextSelected,
+                        (slot.time === selectedStartTime ||
+                          slot.time === selectedEndTime) &&
+                          styles.slotTextSelected,
                       ]}
                     >
                       {slot.time}
@@ -370,10 +440,16 @@ export default function BookingScreen() {
           {duration > 0 && (
             <>
               <View style={styles.summaryCard}>
-                <Text style={[styles.sectionTitlePlain, { color: "#886BC1" }]}>Resumen de Pago</Text>
+                <Text style={[styles.sectionTitlePlain, { color: "#886BC1" }]}>
+                  Resumen de Pago
+                </Text>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Subtotal ({duration}h):</Text>
-                  <Text style={styles.summaryValue}>L {subtotal.toFixed(2)}</Text>
+                  <Text style={styles.summaryLabel}>
+                    Subtotal ({duration}h):
+                  </Text>
+                  <Text style={styles.summaryValue}>
+                    L {subtotal.toFixed(2)}
+                  </Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Comisión Nani (10%):</Text>
@@ -382,25 +458,45 @@ export default function BookingScreen() {
                 <View style={styles.summaryDivider} />
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryTotalLabel}>Total a Pagar:</Text>
-                  <Text style={styles.summaryTotalValue}>L {total.toFixed(2)}</Text>
+                  <Text style={styles.summaryTotalValue}>
+                    L {total.toFixed(2)}
+                  </Text>
                 </View>
               </View>
 
               <View style={styles.sectionCard}>
-                <Text style={styles.sectionTitlePlain}>Selecciona Método de Pago</Text>
+                <Text style={styles.sectionTitlePlain}>
+                  Selecciona Método de Pago
+                </Text>
                 <View style={styles.paymentRow}>
                   {metodosPago.map((metodo) => (
                     <TouchableOpacity
                       key={metodo.id}
-                      style={[styles.payMethod, metodoSeleccionado === metodo.id && styles.payMethodSelected]}
+                      style={[
+                        styles.payMethod,
+                        metodoSeleccionado === metodo.id &&
+                          styles.payMethodSelected,
+                      ]}
                       onPress={() => setMetodoSeleccionado(metodo.id)}
                     >
                       <Ionicons
-                        name={metodo.nombre.toLowerCase().includes("tarjeta") ? "card" : "cash"}
+                        name={
+                          metodo.nombre.toLowerCase().includes("tarjeta")
+                            ? "card"
+                            : "cash"
+                        }
                         size={24}
-                        color={metodoSeleccionado === metodo.id ? "#FFF" : "#886BC1"}
+                        color={
+                          metodoSeleccionado === metodo.id ? "#FFF" : "#886BC1"
+                        }
                       />
-                      <Text style={[styles.payText, metodoSeleccionado === metodo.id && styles.payTextSelected]}>
+                      <Text
+                        style={[
+                          styles.payText,
+                          metodoSeleccionado === metodo.id &&
+                            styles.payTextSelected,
+                        ]}
+                      >
                         {metodo.nombre}
                       </Text>
                     </TouchableOpacity>
@@ -415,12 +511,20 @@ export default function BookingScreen() {
           <TouchableOpacity
             style={[
               styles.confirmButton,
-              (duration === 0 || selectedNinos.length === 0 || isConfirming) && { backgroundColor: "#CCC" },
+              (duration === 0 ||
+                selectedNinos.length === 0 ||
+                isConfirming) && { backgroundColor: "#CCC" },
             ]}
-            disabled={duration === 0 || selectedNinos.length === 0 || isConfirming}
+            disabled={
+              duration === 0 || selectedNinos.length === 0 || isConfirming
+            }
             onPress={handleConfirmarReserva}
           >
-            {isConfirming ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmButtonText}>Confirmar Reserva</Text>}
+            {isConfirming ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.confirmButtonText}>Confirmar Reserva</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -437,7 +541,12 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
   },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 20 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 20,
+  },
   headerTitle: { color: "#FFFFFF", fontSize: 22, fontWeight: "700" },
   headerBackButton: {
     width: 40,
@@ -461,8 +570,18 @@ const styles = StyleSheet.create({
   babysitterImage: { width: 64, height: 64, borderRadius: 32 },
   babysitterName: { fontSize: 18, fontWeight: "700", color: "#2E2E2E" },
   babysitterRate: { color: "#886BC1", fontSize: 16, fontWeight: "600" },
-  sectionCard: { backgroundColor: "#FFFFFF", borderRadius: 20, padding: 18, marginBottom: 16 },
-  sectionTitlePlain: { color: "#2E2E2E", fontSize: 18, fontWeight: "700", marginBottom: 16 },
+  sectionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
+  },
+  sectionTitlePlain: {
+    color: "#2E2E2E",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 16,
+  },
   notesInput: {
     backgroundColor: "#F9F9F9",
     borderRadius: 12,
@@ -473,34 +592,92 @@ const styles = StyleSheet.create({
     borderColor: "#EEE",
   },
   daysRow: { flexDirection: "row", justifyContent: "space-between" },
-  dayButton: { width: "13%", paddingVertical: 8, borderRadius: 12, backgroundColor: "#F5F5F5", alignItems: "center" },
+  daysScrollContainer: {
+    paddingRight: 16,
+    gap: 10,
+  },
+
+  dayButton: {
+    width: 55,
+    height: 65,
+    borderRadius: 15,
+    backgroundColor: "#F5F5F5",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+  },
+
   dayButtonSelected: { backgroundColor: "#FF768A" },
   dayInitialText: { fontSize: 10, color: "#888" },
   dayButtonText: { color: "#2E2E2E", fontWeight: "700" },
   dayButtonTextSelected: { color: "#FFFFFF" },
-  slotsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center" },
-  slotButton: { width: "30%", padding: 12, borderRadius: 15, borderWidth: 1.5, borderColor: "#886BC1", alignItems: "center" },
+  slotsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    justifyContent: "center",
+  },
+  slotButton: {
+    width: "30%",
+    padding: 12,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: "#886BC1",
+    alignItems: "center",
+  },
   slotSelected: { backgroundColor: "#FF768A", borderColor: "#FF768A" },
   slotDisabled: { backgroundColor: "#F9F9F9", borderColor: "#EEE" },
   slotText: { color: "#886BC1", fontWeight: "700" },
   slotTextSelected: { color: "#FFFFFF" },
   paymentRow: { flexDirection: "row", gap: 12 },
-  payMethod: { flex: 1, padding: 16, borderRadius: 15, borderWidth: 1.5, borderColor: "#886BC1", alignItems: "center", gap: 8 },
+  payMethod: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: "#886BC1",
+    alignItems: "center",
+    gap: 8,
+  },
   payMethodSelected: { backgroundColor: "#886BC1" },
   payText: { fontWeight: "700", color: "#886BC1" },
   payTextSelected: { color: "#FFF" },
-  summaryCard: { backgroundColor: "#F6EFFF", borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: "#E0D1F9" },
-  summaryRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
+  summaryCard: {
+    backgroundColor: "#F6EFFF",
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E0D1F9",
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
   summaryLabel: { color: "#555", fontSize: 14 },
   summaryValue: { fontWeight: "600", color: "#333" },
   summaryDivider: { height: 1, backgroundColor: "#D1C4E9", marginVertical: 10 },
   summaryTotalLabel: { fontWeight: "700", color: "#886BC1", fontSize: 16 },
   summaryTotalValue: { fontWeight: "800", fontSize: 22, color: "#886BC1" },
   bottomBar: { padding: 16, backgroundColor: "#FFF" },
-  confirmButton: { backgroundColor: "#FF768A", borderRadius: 18, paddingVertical: 16, alignItems: "center" },
+  confirmButton: {
+    backgroundColor: "#FF768A",
+    borderRadius: 18,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
   confirmButtonText: { color: "#FFF", fontWeight: "700", fontSize: 16 },
   ninosGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  ninoChip: { flexDirection: "row", alignItems: "center", padding: 10, borderRadius: 20, borderWidth: 1, borderColor: "#886BC1", gap: 5 },
+  ninoChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#886BC1",
+    gap: 5,
+  },
   ninoChipSelected: { backgroundColor: "#886BC1" },
   ninoText: { color: "#886BC1" },
   ninoTextSelected: { color: "#FFF" },

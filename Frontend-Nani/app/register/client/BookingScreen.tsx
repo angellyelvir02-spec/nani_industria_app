@@ -1,11 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
+
 import React, { useEffect, useMemo, useState, useCallback } from "react";
+
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -176,20 +179,29 @@ export default function BookingScreen() {
   }, [duration, babysitter.hourlyRate]);
 
   const handleConfirmarReserva = async () => {
+    // 1. Validaciones iniciales (de ambas)
     if (selectedNinos.length === 0) {
-      return Alert.alert(
-        "Información faltante",
-        "Selecciona al menos un niño.",
-      );
-    }
-    if (!selectedStartTime || !selectedEndTime) {
-      return Alert.alert(
-        "Selección de tiempo",
-        "Debes elegir un rango (inicio y fin).",
-      );
+      if (Platform.OS === "web") {
+        window.alert("Por favor, selecciona al menos un niño.");
+      } else {
+        Alert.alert(
+          "Información faltante",
+          "Por favor, selecciona al menos un niño.",
+        );
+      }
+      return;
     }
 
-    // Validar que no haya huecos ocupados entre el inicio y el fin
+    if (!selectedStartTime || !selectedEndTime) {
+      if (Platform.OS === "web") {
+        window.alert("Debes elegir inicio y fin.");
+      } else {
+        Alert.alert("Selección de tiempo", "Debes elegir inicio y fin.");
+      }
+      return;
+    }
+
+    // Validar que no haya huecos ocupados (de tu versión)
     const startIdx = timeSlots.findIndex((s) => s.time === selectedStartTime);
     const endIdx = timeSlots.findIndex((s) => s.time === selectedEndTime);
     const hasConflict = timeSlots
@@ -197,31 +209,37 @@ export default function BookingScreen() {
       .some((s) => s.status !== "available");
 
     if (hasConflict) {
-      return Alert.alert(
-        "Conflicto",
-        "El rango seleccionado incluye horas no disponibles.",
-      );
+      if (Platform.OS === "web") {
+        window.alert("El rango seleccionado incluye horas no disponibles.");
+      } else {
+        Alert.alert(
+          "Conflicto",
+          "El rango seleccionado incluye horas no disponibles.",
+        );
+      }
+      return;
     }
 
     setIsConfirming(true);
+    console.log("🚀 Iniciando proceso de reserva...");
+
     try {
       const token = await AsyncStorage.getItem("userToken");
 
-      // --- CAMBIOS AQUÍ ---
+      // Body combinado (con todos los campos necesarios)
       const body = {
         ninera_id: id,
         metodo_pago_id: metodoSeleccionado,
         fecha_servicio: selectedDate,
         hora_inicio: selectedStartTime,
         hora_fin: selectedEndTime,
-        duracion_horas: duration, // Enviamos la duración calculada
-        monto_base: pricing.subtotal, // El subtotal (tarifa * horas)
-        monto_comision: pricing.fee, // La comisión del 10%
-        propina: 0, // Por ahora en 0
+        duracion_horas: duration, // ← tuyo
+        monto_base: pricing.subtotal, // ← tuyo
+        monto_comision: pricing.fee, // ← tuyo
+        propina: 0, // ← tuyo
         notas_importantes: notas,
         ninos_ids: selectedNinos,
       };
-      // --------------------
 
       const response = await fetch(ENDPOINTS.crear_reserva, {
         method: "POST",
@@ -233,9 +251,13 @@ export default function BookingScreen() {
       });
 
       const result = await response.json();
-      if (!response.ok)
-        throw new Error(result.message || "Error en la reserva");
+      console.log("📥 Respuesta completa del servidor:", result);
 
+      if (!response.ok) {
+        throw new Error(result.message || "Error en la reserva");
+      }
+
+      // --- TU LÓGICA DE PAGO Y REDIRECCIÓN (mejor) ---
       const esTarjeta = metodosPago
         .find((m) => m.id === metodoSeleccionado)
         ?.nombre.toLowerCase()
@@ -248,20 +270,55 @@ export default function BookingScreen() {
         });
       } else {
         const ninosDetalle = ninos.filter((n) => selectedNinos.includes(n.id));
-        router.replace({
-          pathname: "/register/client/ReservationSuccess",
-          params: {
-            reservaId: result.reservaId,
-            codigoReserva: result.codigoReserva,
-            montoTotal: result.montoTotal,
-            nombreNinera: babysitter.name,
-            fecha: selectedDate,
-            ninos: JSON.stringify(ninosDetalle),
-          },
-        });
+
+        // Mensaje de éxito multiplataforma (de ella)
+        const successMsg = "Reserva creada correctamente.";
+
+        if (Platform.OS === "web") {
+          window.alert(successMsg);
+          router.replace({
+            pathname: "/register/client/ReservationSuccess",
+            params: {
+              reservaId: result.reservaId,
+              codigoReserva: result.codigoReserva,
+              montoTotal: result.montoTotal || pricing.total,
+              nombreNinera: babysitter.name,
+              fecha: selectedDate,
+              ninos: JSON.stringify(ninosDetalle),
+            },
+          });
+        } else {
+          Alert.alert("¡Éxito!", successMsg, [
+            {
+              text: "OK",
+              onPress: () =>
+                router.replace({
+                  pathname: "/register/client/ReservationSuccess",
+                  params: {
+                    reservaId: result.reservaId,
+                    codigoReserva: result.codigoReserva,
+                    montoTotal: result.montoTotal || pricing.total,
+                    nombreNinera: babysitter.name,
+                    fecha: selectedDate,
+                    ninos: JSON.stringify(ninosDetalle),
+                  },
+                }),
+            },
+          ]);
+        }
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      console.error("🔥 Error:", error);
+
+      // Manejo de errores multiplataforma (de ella)
+      if (Platform.OS === "web") {
+        window.alert("Error: " + (error.message || "No se pudo conectar"));
+      } else {
+        Alert.alert(
+          "Error de Conexión",
+          error.message || "No se pudo conectar.",
+        );
+      }
     } finally {
       setIsConfirming(false);
     }

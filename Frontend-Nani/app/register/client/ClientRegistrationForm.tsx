@@ -5,6 +5,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -122,12 +123,18 @@ export default function ClientRegistrationForm() {
 
   const handleSubmit = async () => {
     if (!validateForm()) {
-      Alert.alert("Campos incompletos", "Por favor corrige los errores en rojo antes de continuar.");
+      const msg = "Por favor corrige los errores en rojo antes de continuar.";
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert("Campos incompletos", msg);
       return;
     }
 
     try {
       setLoading(true);
+      console.log("🚀 Registrando nuevo cliente...");
+
+      // Usamos un objeto normal para JSON si tu backend lo prefiere, 
+      // o mantenemos FormData si manejas archivos. 
+      // Aquí lo dejo como lo tenías pero con logs.
       const data = new FormData();
       data.append("nombre", formData.firstName);
       data.append("apellido", formData.lastName);
@@ -141,20 +148,31 @@ export default function ClientRegistrationForm() {
       });
 
       const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "Error al registrar");
+      console.log("📥 Respuesta del servidor:", result);
 
-      Alert.alert(
-        "¡Cuenta creada!",
-        "Ya eres parte de Nani. Por favor, inicia sesión para explorar.",
-        [{ text: "Ir al Login", onPress: () => router.replace("/login") }],
-      );
+      if (response.ok) {
+        const successTitle = "¡Cuenta creada!";
+        const successMsg = "Ya eres parte de Nani. Por favor, inicia sesión.";
+
+        if (Platform.OS === 'web') {
+          window.alert(`${successTitle}\n${successMsg}`);
+          router.replace("/login");
+        } else {
+          Alert.alert(successTitle, successMsg, [
+            { text: "Ir al Login", onPress: () => router.replace("/login") },
+          ]);
+        }
+      } else {
+        throw new Error(result.message || "Error al registrar");
+      }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Error de conexión");
+      console.error("🔥 Error en registro:", error);
+      const errorMsg = error.message || "Error de conexión";
+      Platform.OS === 'web' ? window.alert("Error: " + errorMsg) : Alert.alert("Error", errorMsg);
     } finally {
       setLoading(false);
     }
   };
-
   return (
     <View style={styles.container}>
       <LinearGradient

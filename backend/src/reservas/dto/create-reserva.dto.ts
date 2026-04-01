@@ -59,6 +59,10 @@ export class CreateReservaDto {
 
   @IsNumber()
   @IsNotEmpty()
+  monto_comision: number;
+
+  @IsNumber()
+  @IsNotEmpty()
   monto_base: number; // El subtotal calculado en el frontend
 
   @IsNumber()

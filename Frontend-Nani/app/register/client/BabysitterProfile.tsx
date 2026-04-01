@@ -1664,7 +1664,7 @@ export default function BabysitterProfile() {
                 </View>
                 <View style={styles.priceBox}>
                   <Text style={styles.priceValue}>
-                    ${babysitter.hourlyRate}
+                    L.{babysitter.hourlyRate}
                   </Text>
                   <Text style={styles.priceLabel}>por hora</Text>
                 </View>
@@ -1768,7 +1768,7 @@ export default function BabysitterProfile() {
             onPress={handleBook}
             activeOpacity={0.85}
           >
-            <Text style={styles.bookButtonText}>Contratar ahora</Text>
+            <Text style={styles.bookButtonText}>Solicitar reserva</Text>
           </TouchableOpacity>
         </View>
       </View>

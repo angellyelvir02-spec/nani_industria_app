@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
@@ -16,6 +15,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { ENDPOINTS } from '../../../constants/apiConfig';
 
 export default function BabysitterRegistrationForm() {
@@ -148,18 +148,24 @@ if (field === "phone") {
     return age;
   };
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
+ const handleDateChange = (selectedDate: Date) => {
+  setShowDatePicker(false);
 
-    if (selectedDate) {
-      const age = calculateAge(selectedDate);
-      setFormData({
-        ...formData,
-        birthDate: selectedDate.toISOString().split('T')[0],
-        age: age.toString(),
-      });
+  if (selectedDate) {
+    const age = calculateAge(selectedDate);
+    setFormData({
+      ...formData,
+      // Formateamos la fecha a YYYY-MM-DD para el backend
+      birthDate: selectedDate.toISOString().split('T')[0],
+      age: age.toString(),
+    });
+    
+    // Limpiar error de fecha si existía
+    if (errors.birthDate) {
+      setErrors({ ...errors, birthDate: null });
     }
-  };
+  }
+};
 
   const pickImage = async (field: string) => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -416,27 +422,29 @@ if (field === "phone") {
               {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
 
               <Text style={styles.label}>Fecha de nacimiento</Text>
-              <TouchableOpacity
-                style={styles.inputContainer}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Ionicons name="calendar-outline" size={18} color="#9CA3AF" />
-                <TextInput
-                  placeholder="Seleccionar fecha"
-                  style={styles.input}
-                  value={formData.birthDate}
-                  editable={false}
-                />
-              </TouchableOpacity>
-
-              {showDatePicker && (
-                <DateTimePicker
-                  value={new Date()}
-                  mode="date"
-                  display="default"
-                  onChange={handleDateChange}
-                />
-              )}
+<TouchableOpacity
+style={[styles.inputContainer, errors.birthDate && styles.inputError]} // Añade el estilo de error
+  onPress={() => setShowDatePicker(true)}
+>
+  <Ionicons name="calendar-outline" size={18} color="#9CA3AF" />
+  <TextInput
+    placeholder="Seleccionar fecha"
+    style={styles.input}
+    value={formData.birthDate}
+    editable={false}
+  />
+</TouchableOpacity>
+{errors.birthDate && <Text style={styles.errorText}>{errors.birthDate}</Text>}
+<DateTimePickerModal
+  isVisible={showDatePicker}
+  mode="date"
+  onConfirm={handleDateChange} // Se pasa la fecha directamente aquí
+  onCancel={() => setShowDatePicker(false)}
+  maximumDate={new Date()} // Evita que elijan fechas futuras
+  locale="es_ES" // Para que los botones salgan en español
+  confirmTextIOS="Confirmar"
+  cancelTextIOS="Cancelar"
+/>
 
               <Text style={styles.label}>Edad</Text>
               <View style={styles.inputContainer}>

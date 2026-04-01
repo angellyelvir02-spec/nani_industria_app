@@ -16,7 +16,8 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import MapView from "react-native-maps";
+//import MapView from "react-native-maps";
+import CustomMap from '../../../components/CustomMap';
 import { ENDPOINTS } from "../../../constants/apiConfig";
 
 const { width } = Dimensions.get("window");
@@ -237,10 +238,10 @@ export default function ClientRegistrationForm2() {
             {loadingLocation ? (
               <ActivityIndicator size="large" color="#886BC1" style={{ marginTop: 70 }} />
             ) : (
-              <MapView
+              <CustomMap
                 style={styles.map}
                 region={region}
-                onRegionChangeComplete={(r) => setRegion(r)}
+                onRegionChangeComplete={(r:any) => setRegion(r)}
                 showsUserLocation={true}
               />
             )}

@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
+//import { Platform, Alert, ... } from "react-native";
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -151,6 +153,7 @@ export default function BookingScreen() {
   }, [duration, babysitter.hourlyRate]);
 
   // --- FUNCIÓN DE VALIDACIÓN Y ENVÍO ---
+  /*
   const handleConfirmarReserva = async () => {
     // 1. Validación de Niños
     if (selectedNinos.length === 0) {
@@ -235,6 +238,84 @@ export default function BookingScreen() {
       }
     } catch (error: any) {
       Alert.alert("Error", error.message);
+    } finally {
+      setIsConfirming(false);
+    }
+  };*/
+const handleConfirmarReserva = async () => {
+    // 1. Validaciones iniciales
+    if (selectedNinos.length === 0) {
+      return Alert.alert("Información faltante", "Por favor, selecciona al menos un niño.");
+    }
+    if (!selectedStartTime || !selectedEndTime) {
+      return Alert.alert("Selección de tiempo", "Debes elegir inicio y fin.");
+    }
+
+    setIsConfirming(true);
+    console.log("🚀 Iniciando proceso de reserva...");
+
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+      
+      const body = {
+        ninera_id: id,
+        metodo_pago_id: metodoSeleccionado,
+        fecha_servicio: selectedDate,
+        hora_inicio: selectedStartTime,
+        hora_fin: selectedEndTime,
+        notas_importantes: notas,
+        ninos_ids: selectedNinos,
+        monto_base: subtotal,
+      };
+
+      const response = await fetch(ENDPOINTS.crear_reserva, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const result = await response.json();
+      console.log("📥 Respuesta completa del servidor:", result);
+
+      if (response.ok) {
+        console.log("✅ Reserva exitosa!");
+        const successMsg = "Reserva creada correctamente.";
+
+        // --- LÓGICA MULTIPLATAFORMA ---
+        if (Platform.OS === 'web') {
+          // Si es WEB: Usamos el alert nativo del navegador y redirigimos
+          window.alert(successMsg);
+          router.replace({ 
+            pathname: "/register/client/BabysitterProfile", 
+            params: { babysitterId: id } 
+          });
+        } else {
+          // Si es MÓVIL (Samsung): Usamos Alert.alert de React Native
+          Alert.alert("¡Éxito!", successMsg, [
+            { 
+              text: "OK", 
+              onPress: () => router.replace({ 
+                pathname: "/register/client/BabysitterProfile", 
+                params: { babysitterId: id } 
+              }) 
+            }
+          ]);
+        }
+      } else {
+        throw new Error(result.message || "Error en el servidor");
+      }
+    } catch (error: any) {
+      console.error("🔥 Error:", error);
+      
+      // Manejo de errores también para Web
+      if (Platform.OS === 'web') {
+        window.alert("Error: " + (error.message || "No se pudo conectar"));
+      } else {
+        Alert.alert("Error de Conexión", error.message || "No se pudo conectar.");
+      }
     } finally {
       setIsConfirming(false);
     }

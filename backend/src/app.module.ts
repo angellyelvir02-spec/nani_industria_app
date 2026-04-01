@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { NinerasModule } from './nineras/nineras.module';
 import { ReservasModule } from './reservas/reservas.module';
 import { ClientesModule } from './clientes/clientes.module';
+import { DisponibilidadModule } from './nineras/disponibilidad/disponibilidad.module';
 
 @Module({
   imports: [
@@ -20,7 +21,8 @@ import { ClientesModule } from './clientes/clientes.module';
     NinerasModule,
     ReservasModule,
     ClientesModule,
-  ],
+    DisponibilidadModule,
+  ],  
   controllers: [AppController],
   providers: [AppService],
 })

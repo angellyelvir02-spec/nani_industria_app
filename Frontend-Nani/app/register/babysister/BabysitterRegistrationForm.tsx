@@ -294,7 +294,7 @@ if (field === "phone") {
         data.append("telefono", formData.phone);
         data.append("ubicacion", formData.location);
         data.append("fecha_nacimiento", formData.birthDate);
-        data.append("edad", formData.age);
+        //data.append("edad", formData.age);
         data.append("presentacion", formData.presentation);
         data.append("experiencia", formData.experience);
         data.append("tarifa", formData.rate);
@@ -302,22 +302,28 @@ if (field === "phone") {
         data.append("habilidades", formData.skills.join(","));
         data.append("certificaciones", formData.certificates.join(","));
 
+        // ✅ FOTO DE PERFIL (selfie)
         if (formData.facePhoto) {
-          data.append("DNI_frontal_url", {
+          data.append("foto_url", {
             uri: formData.facePhoto.uri,
             type: "image/jpeg",
-            name: "foto_rostro.jpg",
+            name: "foto_perfil.jpg",
           } as any);
         }
 
+        // ✅ DNI FRONTAL
         if (formData.idPhoto) {
-          data.append("DNI_reverso_url", {
+          data.append("DNI_frontal_url", {
             uri: formData.idPhoto.uri,
             type: "image/jpeg",
-            name: "dni_reverso.jpg",
+            name: "dni_frontal.jpg",
           } as any);
         }
 
+        // ✅ DNI REVERSO (no se usa aún)
+        //data.append("DNI_reverso_url", "null");
+
+        // ✅ ANTECEDENTES
         if (formData.criminalRecordPhoto) {
           data.append("Antecedentes_penales_url", {
             uri: formData.criminalRecordPhoto.uri,

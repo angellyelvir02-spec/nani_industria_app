@@ -201,13 +201,10 @@ export class NinerasService {
       'Sábado',
     ];
 
-    // 2. CORRECCIÓN DE FECHA: Evitamos el desfase UTC
-    // Al hacer split y usar el constructor de Date con números, JS lo trata como hora LOCAL.
     const [year, month, day] = fecha.split('-').map(Number);
     const dateObj = new Date(year, month - 1, day);
     const diaSemanaNombre = diasSemanas[dateObj.getDay()];
 
-    // Log útil para revisar en la consola de NestJS
     console.log(
       `Consulta Nani: ${fecha} -> Detectado como: ${diaSemanaNombre}`,
     );
@@ -240,7 +237,7 @@ export class NinerasService {
     const inicio = parseInt(horarioBase.hora_inicio.split(':')[0]);
     const fin = parseInt(horarioBase.hora_fin.split(':')[0]);
 
-    for (let hora = inicio; hora < fin; hora++) {
+    for (let hora = inicio; hora <= fin; hora++) {
       const horaStr = `${hora.toString().padStart(2, '0')}:00`;
 
       // Verificamos si esta hora cae dentro del rango de alguna reserva existente

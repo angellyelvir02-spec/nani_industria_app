@@ -1,5 +1,4 @@
-
-const DEV_IP = "10.118.32.61";const PORT = "3000";
+const DEV_IP = "192.168.0.11";const PORT = "3000";
 
 export const API_URL = `http://${DEV_IP}:${PORT}`;
 
@@ -31,6 +30,13 @@ export const ENDPOINTS = {
   get_reservas_cliente: (clienteId: string) =>
     `${API_URL}/reservas/cliente/${clienteId}`,
 
+  // NUEVA: Historial con fotos de niñeras y detalles de dirección (GET)
+  get_mis_reservas_detalle: (usuarioId: string) =>
+    `${API_URL}/reservas/mis-reservas/${usuarioId}`,
+
+  get_detalle_reserva: (reservaId: string | number) =>
+    `${API_URL}/reservas/detalle/${reservaId}`,
+
   complete_perfil_cliente: `${API_URL}/auth/complete-profile`,
 
   //llamado de niños en reserva
@@ -38,4 +44,7 @@ export const ENDPOINTS = {
   get_metodo_pago: `${API_URL}/reservas/metodos-pago`,
 
   save_disponibilidad_ninera: `${API_URL}/disponibilidad/ninera`,
+  //funcion para despues del la reserva cambios en la tabla pago
+  procesar_checkout: (reservaId: string | number) =>
+    `${API_URL}/reservas/${reservaId}/checkout`,
 };

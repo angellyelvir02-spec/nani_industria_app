@@ -19,39 +19,47 @@ import { SupabaseGuard } from '../auth/supabase.guard';
 export class ReservasController {
   constructor(private readonly reservasService: ReservasService) {}
 
-  // src/reservas/reservas.controller.ts
+  // 1. PRIMERO: Métodos de pago (Ruta específica sin parámetros)
+  @Get('metodos-pago')
+  async obtenerMetodos() {
+    return await this.reservasService.getMetodosPago();
+  }
+
+  // muestra las reservas en la pantalla reservas del cliente
+
+  @Get('mis-reservas/:usuarioId')
+  async getMisReservas(@Param('usuarioId') usuarioId: string) {
+    return await this.reservasService.findBookingsForClientApp(usuarioId);
+  }
+
+  // crear reserva
   @Post()
-  @UseGuards(SupabaseGuard) // Es vital que este Guard esté para que req.user exista
+  @UseGuards(SupabaseGuard)
   async create(@Body() createReservaDto: CreateReservaDto, @Req() req: any) {
-    // Imprime req.user en consola para ver dónde viene el ID si esto falla
     const authUserId = req.user?.id || req.user?.sub;
-
-    if (!authUserId) {
-      throw new BadRequestException(
-        'No se pudo identificar al usuario desde el token',
-      );
-    }
-
+    if (!authUserId) throw new BadRequestException('Usuario no identificado');
     return this.reservasService.create(createReservaDto, authUserId);
   }
 
-  @Get()
-  findAll() {
-    return this.reservasService.findAll();
+  // muestra las detalles de cada reserva del cliente
+  @Get('detalle/:id')
+  async getDetalle(@Param('id') id: string) {
+    return await this.reservasService.getBookingDetail(id);
   }
 
-  // Cambié Param a @Param para que coincida con NestJS
+  @Patch(':id/checkout')
+  async checkout(@Param('id') id: string) {
+    // Esta función llama a la lógica de Supabase que corregimos
+    return await this.reservasService.procesarCheckout(id);
+  }
+
+  // 4. RUTAS CON PARÁMETROS ESPECÍFICOS
   @Get('ninera/:usuarioId')
   findByNinera(@Param('usuarioId') usuarioId: string) {
     return this.reservasService.findByNinera(usuarioId);
   }
 
-  @Get('metodos-pago')
-  async obtenerMetodos() {
-    console.log('Solicitando métodos de pago desde el cliente...');
-    return await this.reservasService.getMetodosPago();
-  }
-
+  // 5. RUTAS GENÉRICAS AL FINAL (Para evitar que atrapen otras peticiones)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.reservasService.findOne(id);
@@ -65,5 +73,10 @@ export class ReservasController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.reservasService.remove(id);
+  }
+
+  @Get()
+  findAll() {
+    return this.reservasService.findAll();
   }
 }

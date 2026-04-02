@@ -1,10 +1,4 @@
-<<<<<<< HEAD
-const DEV_IP = "192.168.0.11";
-const PORT = "3000";
-=======
-
-const DEV_IP = "10.118.32.61";const PORT = "3000";
->>>>>>> registro-cliente
+const DEV_IP = "192.168.0.11";const PORT = "3000";
 
 export const API_URL = `http://${DEV_IP}:${PORT}`;
 

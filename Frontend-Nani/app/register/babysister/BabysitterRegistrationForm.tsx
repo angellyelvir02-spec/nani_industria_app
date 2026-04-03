@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -241,6 +242,8 @@ if (field === "phone") {
         newErrors.lastName = "Revisa tus apellidos.";
         isValid = false;
       }
+      console.log("Fecha que se envía:", formData.birthDate); 
+// Debería verse exactamente así en consola: 2000-05-15
 
       if (!formData.birthDate) {
         Alert.alert("Dato faltante", "Por favor selecciona tu fecha de nacimiento.");
@@ -301,6 +304,10 @@ if (field === "phone") {
 
     // --- PASO 3: ENVÍO AL BACKEND ---
     if (step === 3) {
+      if (!formData.rate.trim()) {
+        Alert.alert("Falta información", "Por favor ingresa tu tarifa por hora.");
+        return;
+      }
       try {
         setLoading(true);
         const data = new FormData();
@@ -350,23 +357,64 @@ if (field === "phone") {
           } as any);
         }
 
+        console.log("Enviando datos a:", ENDPOINTS.register);
         const response = await fetch(ENDPOINTS.register, {
           method: "POST",
           body: data,
+          headers: {
+            'Accept': 'application/json',
+            
+          },
         });
 
         const result = await response.json();
+        console.log("Respuesta del servidor:", result);
 
         if (!response.ok) {
           throw new Error(result.message || "Error al registrar niñera");
         }
+       if (response.ok) {
+  const result = await response.json().catch(() => ({}));
+  console.log("Registro exitoso, procesando redirección...");
 
-        Alert.alert("¡Éxito!", "Tu registro ha sido enviado correctamente.", [
-          { text: "OK", onPress: () => router.replace("/login") }
-        ]);
+  if (Platform.OS === 'web') {
+    // --- SOLUCIÓN PARA NAVEGADOR (WEB) ---
+    // El alert nativo de JS es infalible en la web y detiene el flujo
+    window.alert("¡Registro Recibido!\nTu perfil de Nani ha sido creado y está en revisión. Te avisaremos pronto.");
+    
+    // Redirección forzada
+    console.log("Redirigiendo a login en Web...");
+    router.replace("/login"); 
+    
+    // Respaldo por si router.replace falla en la laptop
+    setTimeout(() => {
+      if (window.location.pathname !== '/login') {
+        window.location.href = "/login";
+      }
+    }, 500);
+
+  } else {
+    // --- SOLUCIÓN PARA MÓVIL (IOS/ANDROID) ---
+    Alert.alert(
+      "¡Registro Recibido!", 
+      "Tu perfil de Nani ha sido creado y está en revisión. Te avisaremos pronto.",
+      [
+        { 
+          text: "Entendido", 
+          onPress: () => {
+            console.log("Redirigiendo a login en Móvil...");
+            router.replace("/login");
+          } 
+        }
+      ],
+      { cancelable: false }
+    );
+  }
+}
 
       } catch (error: any) {
-        Alert.alert("Error", error.message || "No se pudo conectar con el servidor");
+      console.error("Error en el registro:", error);
+        Alert.alert("Error de Registro", error.message || "No se pudo conectar con el servidor");
       } finally {
         setLoading(false);
       }
@@ -440,29 +488,67 @@ if (field === "phone") {
               {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
 
               <Text style={styles.label}>Fecha de nacimiento</Text>
-<TouchableOpacity
-style={[styles.inputContainer, errors.birthDate && styles.inputError]} // Añade el estilo de error
-  onPress={() => setShowDatePicker(true)}
->
-  <Ionicons name="calendar-outline" size={18} color="#9CA3AF" />
-  <TextInput
-    placeholder="Seleccionar fecha"
-    style={styles.input}
-    value={formData.birthDate}
-    editable={false}
+{Platform.OS === 'web' ? (
+  /* --- VISTA PARA LAPTOP (WEB) --- */
+  <View style={[styles.inputContainer, errors.birthDate && styles.inputError]}>
+    <Ionicons name="calendar-outline" size={18} color="#9CA3AF" />
+    <TextInput
+    placeholder="AAAA-MM-DD (Ej: 2000-05-15)"
+  style={styles.input}
+  value={formData.birthDate}
+  onChangeText={(v) => handleInputChange("birthDate", v)}
+  onBlur={() => {
+    // Validamos que tenga el formato correcto antes de procesar
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (dateRegex.test(formData.birthDate)) {
+      // Usamos un split para evitar líos de zonas horarias del navegador
+      const [year, month, day] = formData.birthDate.split('-').map(Number);
+      const selectedDate = new Date(year, month - 1, day);
+
+      if (!isNaN(selectedDate.getTime())) {
+        const age = calculateAge(selectedDate);
+        setFormData(prev => ({
+          ...prev, 
+          birthDate: formData.birthDate, // Mandamos el string limpio
+          age: age.toString() 
+        }));
+      }
+    } else if (formData.birthDate.length > 0) {
+      Alert.alert("Formato incorrecto", "Usa el formato AAAA-MM-DD");
+    }
+    validateField("birthDate", formData.birthDate);
+  }}
+    />
+  </View>
+) : (
+  /* --- VISTA PARA CELULAR (MÓVIL) --- */
+  <TouchableOpacity
+    style={[styles.inputContainer, errors.birthDate && styles.inputError]}
+    onPress={() => setShowDatePicker(true)}
+  >
+    <Ionicons name="calendar-outline" size={18} color="#9CA3AF" />
+    <TextInput
+      placeholder="Seleccionar fecha"
+      style={styles.input}
+      value={formData.birthDate}
+      editable={false}
+    />
+  </TouchableOpacity>
+)}
+
+{/* El Modal de abajo solo se activa en celulares */}
+{Platform.OS !== 'web' && (
+  <DateTimePickerModal
+    isVisible={showDatePicker}
+    mode="date"
+    onConfirm={handleDateChange}
+    onCancel={() => setShowDatePicker(false)}
+    maximumDate={new Date()}
+    locale="es_ES"
+    confirmTextIOS="Confirmar"
+    cancelTextIOS="Cancelar"
   />
-</TouchableOpacity>
-{errors.birthDate && <Text style={styles.errorText}>{errors.birthDate}</Text>}
-<DateTimePickerModal
-  isVisible={showDatePicker}
-  mode="date"
-  onConfirm={handleDateChange} // Se pasa la fecha directamente aquí
-  onCancel={() => setShowDatePicker(false)}
-  maximumDate={new Date()} // Evita que elijan fechas futuras
-  locale="es_ES" // Para que los botones salgan en español
-  confirmTextIOS="Confirmar"
-  cancelTextIOS="Cancelar"
-/>
+)}
 
               <Text style={styles.label}>Edad</Text>
               <View style={styles.inputContainer}>

@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,10 +17,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-//import MapView from "react-native-maps";
-import CustomMap from '../../../components/CustomMap';
-import { ENDPOINTS } from "../../../constants/apiConfig";
 
+import { ENDPOINTS } from "../../../constants/apiConfig";
+//import CustomMap from './CustomMap';
+const CustomMap = Platform.OS === 'web' 
+  ? require('./CustomMap').default 
+  : require('./CustomMap.native').default;
 const { width } = Dimensions.get("window");
 
 export default function ClientRegistrationForm2() {
@@ -135,22 +138,71 @@ export default function ClientRegistrationForm2() {
   };
 
   // SOLUCIÓN PUNTO #3: El componente visual con maximumDate
-  const memoizedDatePicker = useMemo(() => {
-    if (!showDatePicker) return null;
-    return (
-      <DateTimePicker
-        value={pickerDate} // Usa el estado dinámico
-        mode="date"
-        display="default"
-        maximumDate={new Date()} // Bloquea fechas futuras
-        onChange={handleDateChange}
-      />
-    );
-  }, [showDatePicker, pickerDate]);
+ const memoizedDatePicker = useMemo(() => {
+  if (!showDatePicker) return null;
 
-  const searchLocation = async () => {
-    if (!formData.addressSearch.trim()) return;
-    try {
+  // --- SOLUCIÓN PARA WEB (Input nativo de HTML5) ---
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.webPickerContainer}>
+        <input
+          type="date"
+          style={styles.webDateInput}
+          max={new Date().toISOString().split("T")[0]} // Bloquea fechas futuras
+          onChange={(e) => {
+            const date = new Date(e.target.value);
+            // Agregamos un pequeño fix de zona horaria para que no se reste un día
+            date.setMinutes(date.getMinutes() + date.getTimezoneOffset());
+            handleDateChange({ type: "set" }, date);
+          }}
+        />
+        <TouchableOpacity 
+          style={styles.closeWebPicker} 
+          onPress={() => setShowDatePicker(false)}
+        >
+          <Text style={{color: '#886BC1', fontWeight: 'bold'}}>Aceptar</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // --- SOLUCIÓN PARA MÓVIL (Componente Nativo) ---
+  return (
+    <DateTimePicker
+      value={pickerDate}
+      mode="date"
+      display="default"
+      maximumDate={new Date()}
+      onChange={handleDateChange}
+    />
+  );
+}, [showDatePicker, pickerDate]);
+
+ const searchLocation = async () => {
+  if (!formData.addressSearch.trim()) return;
+
+  try {
+    if (Platform.OS === 'web') {
+      // --- SOLUCIÓN PARA WEB (Nominatim) ---
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          formData.addressSearch
+        )}`
+      );
+      const data = await response.json();
+
+      if (data.length > 0) {
+        const { lat, lon } = data[0];
+        setRegion({
+          ...region,
+          latitude: parseFloat(lat),
+          longitude: parseFloat(lon),
+        });
+      } else {
+        Alert.alert("No encontrado", "Prueba especificando: Colonia, Ciudad, Honduras");
+      }
+    } else {
+      // --- SOLUCIÓN PARA MÓVIL (Sigue usando Expo Location) ---
       let result = await Location.geocodeAsync(formData.addressSearch);
       if (result.length > 0) {
         setRegion({
@@ -158,13 +210,13 @@ export default function ClientRegistrationForm2() {
           latitude: result[0].latitude,
           longitude: result[0].longitude,
         });
-      } else {
-        Alert.alert("No encontrado", "Prueba con un nombre más específico.");
       }
-    } catch (error) {
-      Alert.alert("Error", "No pudimos buscar la dirección.");
     }
-  };
+  } catch (error) {
+    console.error("Error en geocoding:", error);
+    Alert.alert("Error", "No pudimos conectar con el servicio de mapas.");
+  }
+};
 
   const pickImage = async (field: string) => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -192,6 +244,11 @@ export default function ClientRegistrationForm2() {
     setIsSubmitting(true);
     try {
       const token = await AsyncStorage.getItem("userToken");
+      console.log("Token recuperado:", token); // <-- Agrega este log para depurar
+      if (!token) {
+  Alert.alert("Error de sesión", "No se encontró un token válido. Por favor inicia sesión de nuevo.");
+  return;
+}
       const uploadData = new FormData();
       uploadData.append("foto_url", {
         uri: formData.profilePhoto.uri,
@@ -684,4 +741,30 @@ const styles = StyleSheet.create({
   addNinoText: { color: "#886BC1", fontWeight: "bold" },
   errorText: { color: "#EF4444", fontSize: 11, marginBottom: 8, marginLeft: 4 },
   inputError: { borderColor: "#EF4444", borderWidth: 1 },
+  webPickerContainer: {
+    backgroundColor: '#F3F4F6',
+    padding: 10,
+    borderRadius: 12,
+    marginTop: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#886BC1',
+  },
+  webDateInput: {
+    width: '100%',
+    padding: 10,
+    borderRadius: 8,
+    // --- CAMBIO AQUÍ: Separamos el border de CSS ---
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderStyle: 'solid',
+    // -----------------------------------------------
+    fontSize: 16,
+    color: '#374151',
+    backgroundColor: '#FFFFFF',
+  },
+  closeWebPicker: {
+    marginTop: 10,
+    padding: 5,
+  }
 });

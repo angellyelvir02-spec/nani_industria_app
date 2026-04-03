@@ -1,39 +1,55 @@
 import React from "react";
-import { View, StyleSheet, Platform } from "react-native";
+import { Image, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-// NO HACER IMPORT DE MAPVIEW AQUÍ ARRIBA
-// Eso es lo que rompe la Web.
-
-export default function CustomMap({ region, onRegionChangeComplete }: any) {
-  // VISTA PARA WEB (Laptop)
-  if (Platform.OS === "web") {
-    // Usamos un iframe de OpenStreetMap (Gratis y no rompe nada)
-    const zoom = 0.005;
-    const url = `https://www.openstreetmap.org/export/embed.html?bbox=${region.longitude - zoom}%2C${region.latitude - zoom}%2C${region.longitude + zoom}%2C${region.latitude + zoom}&layer=mapnik&marker=${region.latitude}%2C${region.longitude}`;
-
-    return (
-      <View style={{ flex: 1, backgroundColor: "#E5E7EB" }}>
-        <iframe
-          title="Nani Map"
-          src={url}
-          width="100%"
-          height="100%"
-          style={{ border: 0 }}
-        />
-      </View>
-    );
-  }
-
-  // VISTA PARA MÓVIL (Android/iOS)
-  // El require dinámico evita que el error aparezca en el navegador
-  const MapView = require("react-native-maps").default;
+export default function CustomMap({ region }: any) {
+  // Nota: Necesitarías una API KEY de Google Cloud (tiene tier gratuito amplio)
+  // Si no tienes una, podemos usar la de OpenStreetMap como imagen.
+  
+  const zoom = 16;
+  const mapUrl = `https://static-maps.yandex.ru/1.x/?ll=${region.longitude},${region.latitude}&z=${zoom}&l=map&pt=${region.longitude},${region.latitude},pm2rdm`;
 
   return (
-    <MapView
-      style={StyleSheet.absoluteFillObject}
-      region={region}
-      onRegionChangeComplete={onRegionChangeComplete}
-      showsUserLocation={true}
-    />
+    <View style={styles.container}>
+      <Image 
+        source={{ uri: mapUrl }} 
+        style={styles.mapImage} 
+        resizeMode="cover"
+      />
+      <TouchableOpacity 
+        style={styles.overlay}
+        onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${region.latitude},${region.longitude}`)}
+      >
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>Ver en pantalla completa ↗</Text>
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    minHeight: 250,
+    borderRadius: 15,
+    overflow: 'hidden',
+    backgroundColor: '#E5E7EB'
+  },
+  mapImage: {
+    width: '100%',
+    height: '100%',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: 10
+  },
+  badge: {
+    backgroundColor: 'rgba(136, 107, 193, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  badgeText: { color: 'white', fontSize: 11, fontWeight: 'bold' }
+});

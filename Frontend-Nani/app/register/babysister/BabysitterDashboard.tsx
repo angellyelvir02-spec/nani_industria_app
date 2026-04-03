@@ -163,6 +163,8 @@ export default function BabysitterDashboard() {
           paymentMethod: item.metodo_pago?.nombre || "No especificado",
           childrenDetails: "Pendiente",
           notes: item.notas_importantes || "Sin notas",
+          latitude: item.direccion?.latitud || item.direccion?.latitude || "",
+          longitude: item.direccion?.longitud || item.direccion?.longitude || "",
         };
       });
 
@@ -387,7 +389,30 @@ export default function BabysitterDashboard() {
                   <Text style={styles.address}>{booking.address}</Text>
 
                   <View style={styles.buttonRow}>
-                    <TouchableOpacity style={styles.acceptBtn}>
+                    <TouchableOpacity
+                      style={styles.acceptBtn}
+                      onPress={() =>
+                        router.push({
+                          pathname: "./JobTracking",
+                          params: {
+                            bookingId: booking.id,
+                            clientName: booking.clientName,
+                            clientPhoto: booking.clientPhoto,
+                            date: booking.date,
+                            time: booking.time,
+                            duration: booking.duration,
+                            children: booking.children,
+                            address: booking.address,
+                            payment: booking.payment,
+                            paymentMethod: booking.paymentMethod,
+                            childrenDetails: booking.childrenDetails,
+                            notes: booking.notes,
+                            latitude: booking.latitude ?? "",
+                            longitude: booking.longitude ?? "",
+                          },
+                        })
+                      }
+                    >
                       <QrCode size={14} color="white" />
                       <Text style={styles.acceptText}>Aceptar</Text>
                     </TouchableOpacity>

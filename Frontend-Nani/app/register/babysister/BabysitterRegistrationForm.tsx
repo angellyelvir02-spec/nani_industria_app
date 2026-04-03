@@ -27,6 +27,19 @@ export default function BabysitterRegistrationForm() {
   const [skillInput, setSkillInput] = useState("");
   const [certificateInput, setCertificateInput] = useState("");
 
+  const experienceYears = [
+    "1 año",
+    "2 años",
+    "3 años",
+    "4 años",
+    "5 años",
+    "6 años",
+    "7 años",
+    "8 años",
+    "9 años",
+    "10+ años",
+  ];
+  
   // ESTADO NUEVO: Mensajes de error
   const [errors, setErrors] = useState<any>({});
   const [loading, setLoading] = useState(false);
@@ -277,6 +290,11 @@ if (field === "phone") {
 
     // --- PASO 2: AVANZAR ---
     if (step === 2) {
+      if (!formData.experience.trim()) {
+        Alert.alert("Campo faltante", "Selecciona tus años de experiencia.");
+        return;
+      }
+    
       setStep(3);
       return;
     }
@@ -581,12 +599,31 @@ style={[styles.inputContainer, errors.birthDate && styles.inputError]} // Añade
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Experiencia</Text>
-              <TextInput
-                placeholder="Describe tu experiencia profesional..."
-                multiline
-                style={styles.textArea}
-                onChangeText={(v) => handleInputChange("experience", v)}
-              />
+              <Text style={styles.helperText}>
+                Selecciona cuántos años de experiencia tienes cuidando niños.
+              </Text>
+
+              <View style={{ marginTop: 10 }}>
+                {experienceYears.map((year, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.experienceOption,
+                      formData.experience === year && styles.experienceOptionActive,
+                    ]}
+                    onPress={() => handleInputChange("experience", year)}
+                  >
+                    <Text
+                      style={[
+                        styles.experienceOptionText,
+                        formData.experience === year && styles.experienceOptionTextActive,
+                      ]}
+                    >
+                      {year}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
             <View style={styles.card}>
@@ -825,5 +862,32 @@ const styles = StyleSheet.create({
   inputError: {
     borderColor: "#EF4444",
     borderWidth: 1,
+  },
+
+  helperText: {
+    color: "#6B7280",
+    marginTop: 6,
+    fontSize: 13,
+  },
+
+  experienceOption: {
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: "#F3F4F6",
+  },
+
+  experienceOptionActive: {
+    backgroundColor: "#FF768A",
+  },
+
+  experienceOptionText: {
+    color: "#333",
+    fontWeight: "500",
+  },
+
+  experienceOptionTextActive: {
+    color: "white",
+    fontWeight: "600",
   },
 });

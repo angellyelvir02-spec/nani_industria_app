@@ -99,39 +99,48 @@ export class NinerasService {
 
   // 2. Corregido findOneByUsuario (Perfil propio de la niñera)
   async findOneByUsuario(usuarioId: string) {
-    const client = this.supabaseService.getAdminClient();
-    const { data, error } = await client
-      .from('ninera')
-      .select(
-        `
-        id,
-        tarifa,
-        experiencia,
-        verificada,
-        presentacion,
-        persona:persona_id ( 
-          id, 
-          nombre, 
-          apellido, 
-          foto_url,
-          direccion:direccion_id ( // <--- CAMBIO: Quitamos 'ubicacion'
-            direccion_completa,
-            latitud,
-            longitud
-          )
-        ),
-        usuario:usuario_id ( correo ),
-        habilidades:habilidad_ninera ( nombre ),
-        certificaciones:certificaciones_ninera ( nombre )
-      `,
-      )
-      .eq('usuario_id', usuarioId)
-      .single();
+  const client = this.supabaseService.getAdminClient();
 
-    if (error) throw new NotFoundException('No se encontró el perfil');
-    return data;
+  const { data, error } = await client
+    .from('ninera')
+    .select(`
+      id,
+      tarifa,
+      experiencia,
+      verificada,
+      presentacion,
+      persona:persona_id (
+        id,
+        nombre,
+        apellido,
+        foto_url,
+        id_direccion,
+        direccion:id_direccion (
+          direccion_completa,
+          latitud,
+          longitud
+        )
+      ),
+      usuario:usuario_id (
+        correo
+      ),
+      habilidades:habilidad_ninera (
+        nombre
+      ),
+      certificaciones:certificaciones_ninera (
+        nombre
+      )
+    `)
+    .eq('usuario_id', usuarioId)
+    .single();
+
+  if (error) {
+    console.error('Error de Supabase en findOneByUsuario:', error);
+    throw new NotFoundException('No se encontró el perfil');
   }
 
+  return data;
+}
   async updateFotoPerfil(usuarioId: string, foto: Express.Multer.File) {
     const client = this.supabaseService.getAdminClient();
 

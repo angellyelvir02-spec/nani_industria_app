@@ -989,30 +989,31 @@ const styles = StyleSheet.create({
   },
 });
 */
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { useMemo, useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  FlatList,
-  StatusBar,
-  ActivityIndicator,
-  Alert,
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import {
   Feather,
+  FontAwesome,
   Ionicons,
   MaterialIcons,
-  FontAwesome,
 } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  Platform,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { ENDPOINTS } from "../../../constants/apiConfig";
-import { useRouter, useFocusEffect } from "expo-router";
 
 // --- TIPOS ---
 type Babysitter = {
@@ -1154,10 +1155,18 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   };
 
   // 3. Navegación con notificación de perfil incompleto corregida
+  // 3. Navegación con detección de perfil incompleto
   const handlePressProfile = async (id: number) => {
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem("userToken");
+      
+      // Si no hay token, al login de un solo
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
       const response = await fetch(ENDPOINTS.me, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -1167,26 +1176,70 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
 
       const userData = await response.json();
 
-      // Validación estricta de fotos de identidad
-      const frontal = userData?.persona?.DNI_frontal_url;
-      const reverso = userData?.persona?.DNI_reverso_url;
+      // --- LOGICA DE REDIRECCIÓN AL FORMULARIO 2 ---
+      // Verificamos si faltan las fotos de identidad o si el objeto persona no existe
+      const persona = userData?.persona;
+      const tieneDNI = persona?.DNI_frontal_url && persona?.DNI_reverso_url;
 
-      if (!frontal || frontal.length < 5 || !reverso || reverso.length < 5) {
-        Alert.alert(
+      // Si no tiene las fotos registradas, mandamos al segundo formulario
+      if (!persona || !tieneDNI) {
+        setLoading(false);
+        const targetRoute = "/register/client/ClientRegistrationForm2";
+        if (Platform.OS === 'web') {
+    const confirmar = window.confirm(
+      "Perfil Incompleto: Debes subir tus documentos para ver niñeras. ¿Ir ahora?"
+    );
+
+    if (confirmar) {
+      // Intento 1: Expo Router
+      router.push(targetRoute as any);
+      setTimeout(() => {
+        window.location.href = targetRoute;
+      }, 100);
+    }
+  } else {
+   Alert.alert(
+      "Perfil Incompleto",
+      "Sube tu DNI para poder ver los detalles de las niñeras.",
+      [
+        {
+          text: "Ir al formulario",
+          onPress: () => router.push(targetRoute as any),
+        },
+        { text: "Más tarde", style: "cancel" }
+      ]
+    );
+  }
+  return;
+}
+
+       /* Alert.alert(
           "Perfil Incompleto",
-          "Debes completar tu perfil para continuar y poder ver los detalles de la niñera.",
+          "Para ver los detalles de las niñeras y garantizar la seguridad, necesitamos que termines de registrar tu identidad.",
           [
             {
-              text: "Completar perfil",
-              onPress: () =>
-                router.push("/register/client/ClientRegistrationForm2"),
+              text: "Completar ahora",
+              onPress: () => {
+                console.log("Intentando navegar a la ruta...");
+                // Asegúrate que esta ruta sea exacta a tu archivo en /app/...
+                router.push("/register/client/ClientRegistrationForm2"); 
+                setTimeout(() => {
+          if (Platform.OS === 'web') {
+            console.log("Respaldo: Forzando navegación vía window.location");
+            // Ajusta esta URL a como aparece en tu navegador cuando estás en esa página
+            window.location.href = "/register/client/ClientRegistrationForm2";
+          }
+        }, 100);
+              },
             },
             { text: "Más tarde", style: "cancel" },
           ],
+          { cancelable: false }
         );
-        return;
-      }
+        return; // Detenemos la ejecución aquí
+      }*/
 
+      // --- SI EL PERFIL ESTÁ COMPLETO, CONTINUA NORMAL ---
       const nani = babysitters.find((b) => b.id === id);
       if (nani) {
         router.push({
@@ -1200,7 +1253,8 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
         });
       }
     } catch (error) {
-      Alert.alert("Error", "No pudimos validar tu acceso con el servidor.");
+      console.error("Error validando perfil:", error);
+      Alert.alert("Error de conexión", "No pudimos verificar tu perfil con el servidor de Nani.");
     } finally {
       setLoading(false);
     }
@@ -1301,14 +1355,14 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.navItem}
-            onPress={() => router.push("/register/client/bookings")}
+            onPress={() => router.push("/register/client/bookings" as any)}
           >
             <Ionicons name="time-outline" size={22} color="#B0B0B0" />
             <Text style={styles.navText}>Reservas</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.navItem}
-            onPress={() => router.push("/register/client/chat")}
+            onPress={() => router.push("/register/client/chat" as any ) }
           >
             <View style={styles.chatIconWrapper}>
               <Ionicons
@@ -1322,7 +1376,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.navItem}
-            onPress={() => router.push("/register/client/UserProfile")}
+            onPress={() => router.push("/register/client/UserProfile" as any)}
           >
             <Ionicons name="person-outline" size={22} color="#B0B0B0" />
             <Text style={styles.navText}>Perfil</Text>

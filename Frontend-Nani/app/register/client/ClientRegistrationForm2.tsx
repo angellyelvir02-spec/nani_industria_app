@@ -226,81 +226,108 @@ export default function ClientRegistrationForm2() {
     if (!result.canceled)
       setFormData({ ...formData, [field]: result.assets[0] });
   };
+const handleFinish = async () => {
+  // --- 1. Validaciones Iniciales ---
+  if (!formData.birthDate || !isAdult) {
+    Alert.alert("Error", "Debes ser mayor de edad.");
+    return;
+  }
+  if (!reference.trim()) {
+    setErrors((prev: any) => ({ ...prev, reference: "Falta referencia" }));
+    return;
+  }
+  if (!formData.profilePhoto || !formData.dniFront || !formData.dniBack) {
+    Alert.alert("Fotos", "Sube todos los documentos.");
+    return;
+  }
 
-  const handleFinish = async () => {
-    if (!formData.birthDate || !isAdult) {
-      Alert.alert("Error", "Debes ser mayor de edad.");
-      return;
-    }
-    if (!reference.trim()) {
-      setErrors((prev: any) => ({ ...prev, reference: "Falta referencia" }));
-      return;
-    }
-    if (!formData.profilePhoto || !formData.dniFront || !formData.dniBack) {
-      Alert.alert("Fotos", "Sube todos los documentos.");
-      return;
-    }
+  setIsSubmitting(true);
 
-    setIsSubmitting(true);
-    try {
-      const token = await AsyncStorage.getItem("userToken");
-      console.log("Token recuperado:", token); // <-- Agrega este log para depurar
-      if (!token) {
-  Alert.alert("Error de sesión", "No se encontró un token válido. Por favor inicia sesión de nuevo.");
-  return;
-}
-      const uploadData = new FormData();
-      uploadData.append("foto_url", {
-        uri: formData.profilePhoto.uri,
-        type: "image/jpeg",
-        name: "avatar.jpg",
-      } as any);
-      uploadData.append("DNI_frontal_url", {
-        uri: formData.dniFront.uri,
-        type: "image/jpeg",
-        name: "dnif.jpg",
-      } as any);
-      uploadData.append("DNI_reverso_url", {
-        uri: formData.dniBack.uri,
-        type: "image/jpeg",
-        name: "dnir.jpg",
-      } as any);
-      uploadData.append("telefono", formData.phone);
-      uploadData.append("fecha_nacimiento", formData.birthDate);
-      uploadData.append(
-        "direccion",
-        formData.addressSearch || "Ubicación en mapa",
-      );
-      uploadData.append("punto_referencia", reference);
-      uploadData.append("ubicacion", `${region.latitude},${region.longitude}`);
-      uploadData.append("ninos", JSON.stringify(ninos));
-
-      const response = await fetch(ENDPOINTS.complete_perfil_cliente, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-        body: uploadData,
-      });
-
-      if (response.ok) {
-        Alert.alert("¡Éxito!", "Perfil completado.", [
-          {
-            text: "Entrar",
-            onPress: () => router.replace("/register/client/home"),
-          },
-        ]);
-      } else {
-        throw new Error("Error al guardar perfil.");
-      }
-    } catch (error: any) {
-      Alert.alert("Error", error.message);
-    } finally {
+  try {
+    const token = await AsyncStorage.getItem("userToken");
+    if (!token) {
+      Alert.alert("Error de sesión", "Inicia sesión de nuevo.");
       setIsSubmitting(false);
+      return;
     }
-  };
 
+    const uploadData = new FormData();
+
+    // --- 2. FUNCIÓN PARA PROCESAR IMÁGENES (WEB vs MÓVIL) ---
+    const processAndAppendImage = async (key: string, asset: any, fileName: string) => {
+      if (!asset) return;
+
+      if (Platform.OS === 'web') {
+        // En Web, convertimos la URI del blob en un archivo real (File/Blob)
+        const response = await fetch(asset.uri);
+        const blob = await response.blob();
+        uploadData.append(key, blob, fileName);
+      } else {
+        // En móvil usamos el formato de objeto nativo
+        uploadData.append(key, {
+          uri: asset.uri,
+          type: "image/jpeg",
+          name: fileName,
+        } as any);
+      }
+    };
+
+    // --- 3. Ejecutar el procesamiento de las 3 imágenes ---
+    await processAndAppendImage("foto_url", formData.profilePhoto, "perfil.jpg");
+    await processAndAppendImage("DNI_frontal_url", formData.dniFront, "dni_f.jpg");
+    await processAndAppendImage("DNI_reverso_url", formData.dniBack, "dni_r.jpg");
+
+    // --- 4. Agregar el resto de campos de Nani ---
+    uploadData.append("telefono", formData.phone);
+    uploadData.append("fecha_nacimiento", formData.birthDate);
+    uploadData.append("direccion", formData.addressSearch || "Ubicación en mapa");
+    uploadData.append("punto_referencia", reference);
+    uploadData.append("ubicacion", `${region.latitude},${region.longitude}`);
+    uploadData.append("ninos", JSON.stringify(ninos));
+
+    console.log("Enviando datos procesados a:", ENDPOINTS.complete_perfil_cliente);
+
+    // --- 5. Petición al Servidor ---
+    const response = await fetch(ENDPOINTS.complete_perfil_cliente, {
+      method: "POST",
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
+        // RECUERDA: No pongas 'Content-Type' manualmente aquí
+      },
+      body: uploadData,
+    });
+
+    const responseText = await response.text();
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch (e) {
+      responseData = { message: responseText };
+    }
+
+    if (response.ok) {
+      console.log("✅ Registro exitoso en DB:", responseData);
+      Alert.alert("¡Éxito!", "Perfil de Nani completado con éxito.", [
+        { text: "Entrar", onPress: () => router.replace("/register/client/home") },
+      ]);
+      
+      // Fix extra para navegación en Web
+      if (Platform.OS === 'web') {
+        setTimeout(() => router.replace("/register/client/home"), 1000);
+      }
+    } else {
+      console.error("❌ Error del servidor:", response.status, responseData);
+      Alert.alert("Error", responseData.message || "No se pudo completar el perfil.");
+    }
+
+  } catch (error: any) {
+    console.error("❌ Error en la petición:", error);
+    Alert.alert("Error de Conexión", "Verifica tu internet o el estado del servidor.");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
   const ProgressBar = () => (
     <View style={styles.progressWrapper}>
       <View style={styles.progressBackground}>

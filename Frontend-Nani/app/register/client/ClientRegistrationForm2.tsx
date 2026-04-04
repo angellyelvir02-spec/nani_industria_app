@@ -20,9 +20,13 @@ import {
 
 import { ENDPOINTS } from "../../../constants/apiConfig";
 //import CustomMap from './CustomMap';
-const CustomMap = Platform.OS === 'web' 
+/*const CustomMap = Platform.OS === 'web' 
   ? require('./CustomMap').default 
-  : require('./CustomMap.native').default;
+  : require('./CustomMap.native').default;*/
+
+
+import CustomMap from "../../../components/CustomMap";
+
 const { width } = Dimensions.get("window");
 
 export default function ClientRegistrationForm2() {

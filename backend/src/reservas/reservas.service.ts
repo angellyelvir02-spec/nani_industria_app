@@ -184,30 +184,60 @@ export class ReservasService {
 
   async findByNinera(usuarioId: string) {
     const admin = this.supabaseService.getAdminClient();
+    
     const { data: ninera, error: nineraError } = await admin
       .from('ninera')
       .select('id')
       .eq('usuario_id', usuarioId)
       .single();
-
-    if (nineraError || !ninera)
+    
+    if (nineraError || !ninera) {
       throw new NotFoundException('Niñera no encontrada');
-
+    }
+  
     const { data, error } = await admin
       .from('reserva')
       .select(
         `
-        *,
-        cliente (id, persona (nombre, apellido, foto_url))
-      `,
+        id,
+        fecha_servicio,
+        hora_inicio,
+        hora_fin,
+        duracion_horas,
+        monto_total,
+        estado,
+        notas_importantes,
+        cliente:cliente_id (
+          id,
+          persona:persona_id (
+            nombre,
+            apellido,
+            foto_url
+          )
+        ),
+        direccion:direccion_id (
+          direccion_completa,
+          punto_referencia,
+          latitud,
+          longitud
+        ),
+        metodo_pago:metodo_pago_id (
+          nombre
+        ),
+        reserva_nino (
+          nino_id
+        )
+        `,
       )
       .eq('ninera_id', ninera.id)
       .order('fecha_servicio', { ascending: false });
-
-    if (error)
+    
+    if (error) {
       throw new BadRequestException(
         `Error obteniendo reservas de niñera: ${error.message}`,
       );
+    }
+  
     return data;
   }
 
@@ -229,11 +259,27 @@ export class ReservasService {
     return data;
   }
 
-  update(id: string, updateReservaDto: UpdateReservaDto) {
-    return {
-      message: `Aquí irá la actualización de la reserva ${id}`,
-      data: updateReservaDto,
-    };
+  async update(id: string, updateReservaDto: UpdateReservaDto) {
+    const admin = this.supabaseService.getAdminClient();
+
+    const { data, error } = await admin
+      .from('reserva')
+      .update(updateReservaDto)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new BadRequestException(
+        `Error actualizando reserva: ${error.message}`,
+      );
+    }
+
+    if (!data) {
+      throw new NotFoundException('Reserva no encontrada');
+    }
+
+    return data;
   }
 
   remove(id: string) {

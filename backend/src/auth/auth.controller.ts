@@ -44,6 +44,7 @@ export class AuthController {
       [
         { name: 'foto_url', maxCount: 1 },
         { name: 'DNI_frontal_url', maxCount: 1 },
+        { name: 'DNI_reverso_url', maxCount: 1 },
         { name: 'Antecedentes_penales_url', maxCount: 1 },
       ],
       {

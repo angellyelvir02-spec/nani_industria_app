@@ -47,4 +47,7 @@ export const ENDPOINTS = {
   //funcion para despues del la reserva cambios en la tabla pago
   procesar_checkout: (reservaId: string | number) =>
     `${API_URL}/reservas/${reservaId}/checkout`,
+
+  update_estado_reserva: (reservaId: string | number) =>
+    `${API_URL}/reservas/${reservaId}`,
 };

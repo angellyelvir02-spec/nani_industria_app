@@ -18,9 +18,9 @@ interface Props {
 }
 
 export default function BabysitterBookingHistory({ onBack }: Props) {
-  const [filter, setFilter] = useState<"all" | "completed" | "cancelled">(
-    "all",
-  );
+  const [filter, setFilter] = useState<
+    "all" | "pending" | "confirmed" | "in_progress" | "completed"
+  >("all");
   const [searchQuery, setSearchQuery] = useState("");
 
   const [bookings, setBookings] = useState<any[]>([]);
@@ -50,6 +50,23 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
         const horaInicio = item.hora_inicio || "";
         const horaFin = item.hora_fin || "";
 
+        const estadoNormalizado = (item.estado || "")
+          .toString()
+          .trim()
+          .toLowerCase();
+
+        let status: "pending" | "confirmed" | "in_progress" | "completed" = "pending";
+
+        if (estadoNormalizado === "pendiente") {
+          status = "pending";
+        } else if (estadoNormalizado === "confirmado") {
+          status = "confirmed";
+        } else if (estadoNormalizado === "en progreso") {
+          status = "in_progress";
+        } else if (estadoNormalizado === "finalizado") {
+          status = "completed";
+        }
+      
         return {
           id: item.id,
           clientName: clientePersona
@@ -62,12 +79,7 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
           duration: item.duracion_horas || 0,
           children: 0,
           payment: 0,
-          status:
-            item.estado === "completada"
-              ? "completed"
-              : item.estado === "cancelada"
-              ? "cancelled"
-              : "completed",
+          status,
           rating: null,
         };
       });
@@ -185,21 +197,96 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
               </Text>
             </TouchableOpacity>
 
+            {/* Todas 
             <TouchableOpacity
               style={[
                 styles.filterButton,
-                filter === "cancelled" && styles.activeFilter,
+                filter === "all" && styles.activeFilter,
               ]}
-              onPress={() => setFilter("cancelled")}
+              onPress={() => setFilter("all")}
             >
               <Text
                 style={
-                  filter === "cancelled"
+                  filter === "all" ? styles.activeFilterText : styles.filterText
+                }
+              >
+                Todas
+              </Text>
+            </TouchableOpacity>*/}
+              
+            {/* Pendientes */}
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                filter === "pending" && styles.activeFilter,
+              ]}
+              onPress={() => setFilter("pending")}
+            >
+              <Text
+                style={
+                  filter === "pending"
                     ? styles.activeFilterText
                     : styles.filterText
                 }
               >
-                Canceladas
+                Pendientes
+              </Text>
+            </TouchableOpacity>
+              
+            {/* Confirmadas */}
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                filter === "confirmed" && styles.activeFilter,
+              ]}
+              onPress={() => setFilter("confirmed")}
+            >
+              <Text
+                style={
+                  filter === "confirmed"
+                    ? styles.activeFilterText
+                    : styles.filterText
+                }
+              >
+                Confirmadas
+              </Text>
+            </TouchableOpacity>
+              
+            {/* En progreso */}
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                filter === "in_progress" && styles.activeFilter,
+              ]}
+              onPress={() => setFilter("in_progress")}
+            >
+              <Text
+                style={
+                  filter === "in_progress"
+                    ? styles.activeFilterText
+                    : styles.filterText
+                }
+              >
+                En progreso
+              </Text>
+            </TouchableOpacity>
+              
+            {/* Finalizadas */}
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                filter === "completed" && styles.activeFilter,
+              ]}
+              onPress={() => setFilter("completed")}
+            >
+              <Text
+                style={
+                  filter === "completed"
+                    ? styles.activeFilterText
+                    : styles.filterText
+                }
+              >
+                Finalizadas
               </Text>
             </TouchableOpacity>
           </View>
@@ -236,16 +323,24 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
                     <Text style={styles.payment}>${booking.payment}</Text>
 
                     <Text
-                      style={
-                        booking.status === "completed"
-                          ? styles.completed
-                          : styles.cancelled
-                      }
-                    >
-                      {booking.status === "completed"
-                        ? "Completada"
-                        : "Cancelada"}
-                    </Text>
+                    style={
+                      booking.status === "completed"
+                        ? styles.completed
+                        : booking.status === "in_progress"
+                        ? styles.inProgress
+                        : booking.status === "confirmed"
+                        ? styles.confirmed
+                        : styles.pending
+                    }
+                  >
+                    {booking.status === "completed"
+                      ? "Finalizado"
+                      : booking.status === "in_progress"
+                      ? "En progreso"
+                      : booking.status === "confirmed"
+                      ? "Confirmado"
+                      : "Pendiente"}
+                  </Text>
                   </View>
                 </View>
               </View>
@@ -407,6 +502,21 @@ const styles = StyleSheet.create({
 
   cancelled: {
     color: "red",
+    fontSize: 12,
+  },
+
+  pending: {
+    color: "#E69B00",
+    fontSize: 12,
+  },
+
+  confirmed: {
+    color: "#2D9CDB",
+    fontSize: 12,
+  },
+
+  inProgress: {
+    color: "#9B51E0",
     fontSize: 12,
   },
 });

@@ -196,6 +196,7 @@ export class AuthService {
   
     let urlFoto = '';
     let urlFrontal = '';
+    let urlReverso = '';
     let urlAntecedentes = '';
   
     // ✅ foto de perfil
@@ -206,6 +207,11 @@ export class AuthService {
     // ✅ dni frontal
     if (files?.DNI_frontal_url) {
       urlFrontal = await uploadFile(files.DNI_frontal_url[0], 'documentos');
+    }
+
+    // ✅ dni reverso
+    if (files?.DNI_reverso_url) {
+      urlReverso = await uploadFile(files.DNI_reverso_url[0], 'documentos');
     }
   
     // ✅ antecedentes
@@ -278,7 +284,7 @@ export class AuthService {
         fecha_nacimiento: dto.fecha_nacimiento || null,
         foto_url: urlFoto || null,
         DNI_frontal_url: urlFrontal || null,
-        DNI_reverso_url: null,
+        DNI_reverso_url: urlReverso || null,
       })
       .select()
       .single();

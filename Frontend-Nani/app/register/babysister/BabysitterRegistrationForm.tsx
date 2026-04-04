@@ -67,6 +67,7 @@ export default function BabysitterRegistrationForm() {
 
     criminalRecordPhoto: null as any,
     idPhoto: null as any,
+    idPhotoBack: null as any,
     facePhoto: null as any,
   });
 
@@ -346,7 +347,13 @@ if (field === "phone") {
         }
 
         // ✅ DNI REVERSO (no se usa aún)
-        //data.append("DNI_reverso_url", "null");
+        if (formData.idPhotoBack) {
+          data.append("DNI_reverso_url", {
+            uri: formData.idPhoto.uri,
+            type: "image/jpeg",
+            name: "dni_reverso.jpg",
+          } as any);
+        }
 
         // ✅ ANTECEDENTES
         if (formData.criminalRecordPhoto) {
@@ -650,6 +657,22 @@ if (field === "phone") {
                 {formData.idPhoto && (
                   <Image
                     source={{ uri: formData.idPhoto.uri }}
+                    style={{ width: 80, height: 80, marginTop: 10, borderRadius: 10 }}
+                  />
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.uploadBox}
+                onPress={() => pickImage("idPhotoBack")}
+              >
+                <Ionicons name="image-outline" size={26} color="#999" />
+                <Text style={styles.uploadText}>
+                  {formData.idPhotoBack ? "Documento cargado" : "Foto de identidad Reverso"}
+                </Text>
+                {formData.idPhotoBack && (
+                  <Image
+                    source={{ uri: formData.idPhotoBack.uri }}
                     style={{ width: 80, height: 80, marginTop: 10, borderRadius: 10 }}
                   />
                 )}

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   ActivityIndicator,
@@ -277,7 +277,7 @@ export default function BookingScreen() {
         if (Platform.OS === "web") {
           window.alert(successMsg);
           router.replace({
-            pathname: "/register/client/ReservationSuccess",
+            pathname: "/register/client/ReservationSuccess" as any,
             params: {
               reservaId: result.reservaId,
               codigoReserva: result.codigoReserva,
@@ -293,7 +293,7 @@ export default function BookingScreen() {
               text: "OK",
               onPress: () =>
                 router.replace({
-                  pathname: "/register/client/ReservationSuccess",
+                  pathname: "/register/client/ReservationSuccess" as any,
                   params: {
                     reservaId: result.reservaId,
                     codigoReserva: result.codigoReserva,

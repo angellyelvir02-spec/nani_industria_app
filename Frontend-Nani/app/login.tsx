@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
@@ -135,6 +136,11 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient colors={["#FF7A8A", "#8B6CCB"]} style={styles.container}>
+      <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1 }}
+    >
+      
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* LOGO */}
         <View style={styles.logoContainer}>
@@ -241,6 +247,7 @@ export default function LoginScreen() {
           </View>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </LinearGradient>
   );
 }

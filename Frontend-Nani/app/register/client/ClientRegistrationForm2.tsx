@@ -4,27 +4,30 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
+//import CustomMap from "../../../components/Maps/CustomMap";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 import { ENDPOINTS } from "../../../constants/apiConfig";
-//import CustomMap from './CustomMap';
-const CustomMap = Platform.OS === 'web' 
-  ? require('./CustomMap').default 
-  : require('./CustomMap.native').default;
-const { width } = Dimensions.get("window");
 
+
+const SelectedMap = Platform.select({
+  web: require("../../../components/CustomMap.web").default,
+  native: require("../../../components/CustomMap").default,
+});
+
+const CustomMap = SelectedMap || require("../../../components/CustomMap").default;
 export default function ClientRegistrationForm2() {
   const router = useRouter();
 
@@ -351,10 +354,16 @@ const handleFinish = async () => {
   );
 
   return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1 }}
+    >
+    
     <ScrollView
       style={styles.container}
       contentContainerStyle={{ paddingBottom: 50 }}
     >
+      
       <ProgressBar />
 
       {step === 1 ? (
@@ -612,7 +621,9 @@ const handleFinish = async () => {
           </View>
         </>
       )}
+    
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

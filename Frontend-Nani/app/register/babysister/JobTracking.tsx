@@ -24,6 +24,9 @@ export default function JobTracking() {
 
   const {
     bookingId,
+    bookingCode,
+    bookingStatus,
+    scanMode,
     clientName,
     clientPhoto,
     date,
@@ -37,7 +40,12 @@ export default function JobTracking() {
     notes,
     latitude,
     longitude,
+    scheduledStart,
+    scheduledEnd,
   } = useLocalSearchParams();
+
+  const normalizedStatus = String(bookingStatus || "").toLowerCase().trim();
+  const normalizedScanMode = String(scanMode || "").toLowerCase().trim();
 
   const openMap = () => {
     const destination = String(address || "");
@@ -48,6 +56,52 @@ export default function JobTracking() {
     )}`;
     Linking.openURL(url);
   };
+
+  const getStatusText = () => {
+    if (normalizedStatus === "en_progreso") {
+      return "Servicio en progreso";
+    }
+
+    if (normalizedStatus === "confirmada") {
+      return "Pendiente de llegada";
+    }
+
+    if (normalizedStatus === "completada") {
+      return "Servicio completado";
+    }
+
+    return "Seguimiento de reserva";
+  };
+
+  const getActionText = () => {
+    if (normalizedScanMode === "checkout") {
+      return "Confirmar salida";
+    }
+
+    return "Confirmar llegada";
+  };
+
+  const getQrType = () => {
+    if (normalizedScanMode === "checkout") {
+      return "checkout";
+    }
+
+    return "checkin";
+  };
+
+  const getHourlyRate = () => {
+    const numericDuration = Number(duration || 0);
+    const numericPayment = Number(payment || 0);
+
+    if (!numericDuration || numericDuration <= 0) {
+      return "0";
+    }
+
+    return (numericPayment / numericDuration).toString();
+  };
+
+  const canScan =
+    normalizedStatus === "confirmada" || normalizedStatus === "en_progreso";
 
   return (
     <View style={styles.container}>
@@ -63,7 +117,9 @@ export default function JobTracking() {
 
             <View>
               <Text style={styles.headerTitle}>Seguimiento del Trabajo</Text>
-              <Text style={styles.headerSub}>Reserva #{bookingId}</Text>
+              <Text style={styles.headerSub}>
+                Reserva #{String(bookingId || "")}
+              </Text>
             </View>
           </View>
 
@@ -72,7 +128,7 @@ export default function JobTracking() {
               <AlertCircle color="white" size={26} />
               <View>
                 <Text style={styles.statusText}>Estado</Text>
-                <Text style={styles.statusValue}>Pendiente de llegada</Text>
+                <Text style={styles.statusValue}>{getStatusText()}</Text>
               </View>
             </View>
           </View>
@@ -118,7 +174,9 @@ export default function JobTracking() {
 
           <View style={styles.row}>
             <MapPin size={18} color="#FF768A" />
-            <Text style={styles.grayText}>{String(address || "Sin dirección")}</Text>
+            <Text style={styles.grayText}>
+              {String(address || "Sin dirección")}
+            </Text>
           </View>
 
           <TouchableOpacity style={styles.mapButton} onPress={openMap}>
@@ -127,16 +185,46 @@ export default function JobTracking() {
           </TouchableOpacity>
         </View>
 
-        {!!notes && String(notes).trim() !== "" && String(notes) !== "Sin notas" && (
-          <View style={styles.notes}>
-            <View style={styles.row}>
-              <AlertCircle size={18} color="#FF768A" />
-              <Text style={styles.cardTitle}>Notas Importantes</Text>
-            </View>
+        {!!notes &&
+          String(notes).trim() !== "" &&
+          String(notes) !== "Sin notas" && (
+            <View style={styles.notes}>
+              <View style={styles.row}>
+                <AlertCircle size={18} color="#FF768A" />
+                <Text style={styles.cardTitle}>Notas Importantes</Text>
+              </View>
 
-            <Text style={styles.grayText}>{String(notes)}</Text>
+              <Text style={styles.grayText}>{String(notes)}</Text>
+            </View>
+          )}
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Detalles del Servicio</Text>
+
+          {!!bookingCode && (
+            <View style={styles.paymentRow}>
+              <Text>Código de reserva</Text>
+              <Text>{String(bookingCode)}</Text>
+            </View>
+          )}
+
+          <View style={styles.paymentRow}>
+            <Text>Horario programado</Text>
+            <Text>
+              {String(scheduledStart || "")} - {String(scheduledEnd || "")}
+            </Text>
           </View>
-        )}
+
+          <View style={styles.paymentRow}>
+            <Text>Duración estimada</Text>
+            <Text>{String(duration || 0)}h</Text>
+          </View>
+
+          <View style={styles.paymentRow}>
+            <Text>Niños</Text>
+            <Text>{String(children || 0)}</Text>
+          </View>
+        </View>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Detalles del Pago</Text>
@@ -147,48 +235,48 @@ export default function JobTracking() {
           </View>
 
           <View style={styles.paymentRow}>
-            <Text>Duración</Text>
-            <Text>{String(duration || 0)}h</Text>
-          </View>
-
-          <View style={styles.paymentRow}>
-            <Text>Niños</Text>
-            <Text>{String(children || 0)}</Text>
-          </View>
-
-          <View style={styles.totalRow}>
             <Text>Total estimado</Text>
-            <Text style={styles.total}>${Number(payment || 0).toFixed(2)}</Text>
+            <Text style={styles.total}>
+              ${Number(payment || 0).toFixed(2)}
+            </Text>
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.confirmButton}
-          onPress={() =>
-            router.push({
-              pathname: "./QRScanner",
-              params: {
-                bookingId,
-                type: "checkin",
-                clientName,
-                clientPhoto,
-                address,
-                scheduledHours: duration,
-                hourlyRate:
-                  Number(duration) > 0
-                    ? (Number(payment) / Number(duration)).toString()
-                    : "0",
-                children,
-                childrenDetails,
-                latitude,
-                longitude,
-              },
-            })
-          }
-        >
-          <QrCode color="white" size={20} />
-          <Text style={styles.confirmText}>Confirmar llegada</Text>
-        </TouchableOpacity>
+        {canScan && (
+          <TouchableOpacity
+            style={styles.confirmButton}
+            onPress={() =>
+              router.push({
+                pathname: "./QRScanner",
+                params: {
+                  bookingId,
+                  bookingCode,
+                  type: getQrType(),
+                  clientName,
+                  clientPhoto,
+                  address,
+                  scheduledHours: duration,
+                  hourlyRate: getHourlyRate(),
+                  children,
+                  childrenDetails,
+                  latitude,
+                  longitude,
+                  bookingStatus,
+                  date,
+                  time,
+                  scheduledStart,
+                  scheduledEnd,
+                  payment,
+                  paymentMethod,
+                  notes,
+                },
+              })
+            }
+          >
+            <QrCode color="white" size={20} />
+            <Text style={styles.confirmText}>{getActionText()}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
@@ -280,12 +368,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 8,
-  },
-
-  totalRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
+    gap: 10,
   },
 
   total: { color: "#886BC1", fontSize: 20, fontWeight: "bold" },

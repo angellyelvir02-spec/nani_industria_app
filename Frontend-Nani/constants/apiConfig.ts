@@ -1,53 +1,55 @@
-const DEV_IP = "192.168.0.13";const PORT = "3000";
+const DEV_IP = "192.168.0.13";
+const PORT = "3000";
 
 export const API_URL = `http://${DEV_IP}:${PORT}`;
 
+const buildUrl = (path: string) => `${API_URL}${path}`;
+
 export const ENDPOINTS = {
-  login: `${API_URL}/auth/login`,
-  register: `${API_URL}/auth/register/ninera`,
-  register_cliente: `${API_URL}/auth/register/cliente`,
-  get_nineras: `${API_URL}/nineras`,
-  get_perfil_ninera: `${API_URL}/nineras/usuario`,
-  me: `${API_URL}/auth/me`,
-  get_detalle_ninera: (id: number | string) => `${API_URL}/nineras/${id}`,
-  get_reservas_ninera: (usuarioId: string) =>
-    `${API_URL}/reservas/ninera/${usuarioId}`,
+  login: buildUrl("/auth/login"),
+  register_ninera: buildUrl("/auth/register/ninera"),
+  register_cliente: buildUrl("/auth/register/cliente"),
+  me: buildUrl("/auth/me"),
+  complete_perfil_cliente: buildUrl("/auth/complete-profile"),
+
+  get_nineras: buildUrl("/nineras"),
+  get_perfil_ninera: buildUrl("/nineras/usuario"),
+  get_detalle_ninera: (id: number | string) => buildUrl(`/nineras/${id}`),
   update_foto_ninera: (usuarioId: string) =>
-    `${API_URL}/nineras/foto/${usuarioId}`,
-  // --- NUEVOS ENDPOINTS PARA RESERVAS ---
-  // Consulta de disponibilidad (GET)
+    buildUrl(`/nineras/foto/${usuarioId}`),
+
   get_disponibilidad: (id: string, fecha: string) =>
-    `${API_URL}/nineras/${id}/availability?fecha=${fecha}`,
+    buildUrl(`/nineras/${id}/availability?fecha=${encodeURIComponent(fecha)}`),
 
-  // Obtener direcciones del cliente para el selector (GET)
+  save_disponibilidad_ninera: buildUrl("/disponibilidad/ninera"),
+
   get_direcciones_cliente: (clienteId: string) =>
-    `${API_URL}/clientes/${clienteId}/direcciones`,
+    buildUrl(`/clientes/${clienteId}/direcciones`),
 
-  // Crear la reserva final (POST)
-  crear_reserva: `${API_URL}/reservas`,
+  get_mis_ninos: buildUrl("/clientes/mis-ninos"),
 
-  // Historial de reservas para el padre (GET)
+  crear_reserva: buildUrl("/reservas"),
+
   get_reservas_cliente: (clienteId: string) =>
-    `${API_URL}/reservas/cliente/${clienteId}`,
+    buildUrl(`/reservas/cliente/${clienteId}`),
 
-  // NUEVA: Historial con fotos de niñeras y detalles de dirección (GET)
+  get_reservas_ninera: (usuarioId: string) =>
+    buildUrl(`/reservas/ninera/${usuarioId}`),
+
   get_mis_reservas_detalle: (usuarioId: string) =>
-    `${API_URL}/reservas/mis-reservas/${usuarioId}`,
+    buildUrl(`/reservas/mis-reservas/${usuarioId}`),
 
   get_detalle_reserva: (reservaId: string | number) =>
-    `${API_URL}/reservas/detalle/${reservaId}`,
+    buildUrl(`/reservas/detalle/${reservaId}`),
 
-  complete_perfil_cliente: `${API_URL}/auth/complete-profile`,
+  get_metodo_pago: buildUrl("/reservas/metodos-pago"),
 
-  //llamado de niños en reserva
-  get_mis_ninos: `${API_URL}/clientes/mis-ninos`,
-  get_metodo_pago: `${API_URL}/reservas/metodos-pago`,
+  procesar_checkin: (reservaId: string | number) =>
+    buildUrl(`/reservas/${reservaId}/checkin`),
 
-  save_disponibilidad_ninera: `${API_URL}/disponibilidad/ninera`,
-  //funcion para despues del la reserva cambios en la tabla pago
   procesar_checkout: (reservaId: string | number) =>
-    `${API_URL}/reservas/${reservaId}/checkout`,
+    buildUrl(`/reservas/${reservaId}/checkout`),
 
   update_estado_reserva: (reservaId: string | number) =>
-    `${API_URL}/reservas/${reservaId}`,
+    buildUrl(`/reservas/${reservaId}`),
 };

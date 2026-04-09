@@ -4,10 +4,10 @@ import {
   Controller,
   Get,
   Post,
-  Req,
   UseInterceptors,
   UploadedFiles,
   Headers,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { AuthService } from './auth.service';
@@ -32,8 +32,17 @@ export class AuthController {
       );
     }
 
-    // Extraemos el token de forma limpia (quedándonos solo con el hash)
+    if (!auth.startsWith('Bearer ')) {
+      throw new BadRequestException(
+        'Formato de token inválido, se esperaba Bearer',
+      );
+    }
+
     const token = auth.replace('Bearer ', '').trim();
+
+    if (!token) {
+      throw new BadRequestException('Token vacío');
+    }
 
     return this.authService.getMe(token);
   }
@@ -58,7 +67,7 @@ export class AuthController {
             'image/png',
             'application/pdf',
           ];
-        
+
           if (!allowedMimeTypes.includes(file.mimetype)) {
             return callback(
               new BadRequestException(
@@ -67,7 +76,7 @@ export class AuthController {
               false,
             );
           }
-        
+
           callback(null, true);
         },
       },
@@ -79,13 +88,13 @@ export class AuthController {
     files: {
       foto_url?: Express.Multer.File[];
       DNI_frontal_url?: Express.Multer.File[];
+      DNI_reverso_url?: Express.Multer.File[];
       Antecedentes_penales_url?: Express.Multer.File[];
     },
   ) {
     return this.authService.registerNinera(dto, files);
   }
 
-  // --- REGISTRO INICIAL (PASO 1) ---
   @Post('register/cliente')
   @UseInterceptors(
     FileFieldsInterceptor(
@@ -110,12 +119,16 @@ export class AuthController {
   )
   async registerCliente(
     @Body() dto: RegisterClienteDto,
-    @UploadedFiles() files: any,
+    @UploadedFiles()
+    files: {
+      foto_url?: Express.Multer.File[];
+      DNI_frontal_url?: Express.Multer.File[];
+      DNI_reverso_url?: Express.Multer.File[];
+    },
   ) {
     return this.authService.registerCliente(dto, files);
   }
 
-  // --- COMPLETAR PERFIL (PASO 2 - AQUÍ ESTABA EL ERROR) ---
   @Post('complete-profile')
   @UseInterceptors(
     FileFieldsInterceptor(
@@ -125,7 +138,7 @@ export class AuthController {
         { name: 'DNI_reverso_url', maxCount: 1 },
       ],
       {
-        limits: { fileSize: 1024 * 1024 * 10 }, // Subimos a 10MB por si las fotos son pesadas
+        limits: { fileSize: 1024 * 1024 * 10 },
         fileFilter: (req, file, callback) => {
           if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
             return callback(
@@ -141,16 +154,47 @@ export class AuthController {
   async completeProfile(
     @Headers('authorization') auth: string,
     @Body() dto: any,
-    @UploadedFiles() files: any,
+    @UploadedFiles()
+    files: {
+      foto_url?: Express.Multer.File[];
+      DNI_frontal_url?: Express.Multer.File[];
+      DNI_reverso_url?: Express.Multer.File[];
+    },
   ) {
-    if (!auth) throw new BadRequestException('No se proporcionó token');
+    if (!auth) {
+      throw new BadRequestException('No se proporcionó token');
+    }
 
-    const token = auth.replace('Bearer ', '');
-    const user = await this.authService.getMe(token);
+    if (!auth.startsWith('Bearer ')) {
+      throw new BadRequestException(
+        'Formato de token inválido, se esperaba Bearer',
+      );
+    }
 
-    if (!user) throw new BadRequestException('Token inválido o expirado');
+    const token = auth.replace('Bearer ', '').trim();
 
-    // Pasamos todo al servicio
-    return this.authService.completeProfile(user.id, dto, files);
+    if (!token) {
+      throw new BadRequestException('Token vacío');
+    }
+
+    try {
+      const user = await this.authService.getMe(token);
+
+      if (!user || !user.id) {
+        throw new BadRequestException('Token inválido o expirado');
+      }
+
+      return this.authService.completeProfile(user.id, dto, files);
+    } catch (err) {
+      console.error('Error en completeProfile (AuthController):', err);
+
+      if (err instanceof BadRequestException) {
+        throw err;
+      }
+
+      throw new InternalServerErrorException(
+        'Error interno al completar perfil',
+      );
+    }
   }
 }

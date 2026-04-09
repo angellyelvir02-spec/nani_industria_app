@@ -10,8 +10,7 @@ import { Disponibilidad_reserva } from './dto/disponibilidad.dto';
 export class NinerasService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
-  //se muestran en el dashbord del cliente aquellas niñeras que han sido aprobadas
-
+  // Retorna las niñeras verificadas para mostrarse en el dashboard del cliente
   async findAll() {
     const client = this.supabaseService.getAdminClient();
 
@@ -28,7 +27,7 @@ export class NinerasService {
             nombre,
             apellido,
             foto_url,
-            direccion:id_direccion ( 
+            direccion:id_direccion (
               id,
               direccion_completa,
               latitud,
@@ -45,15 +44,22 @@ export class NinerasService {
           `Error de base de datos: ${error.message}`,
         );
       }
-      return data;
+
+      return data ?? [];
     } catch (err) {
       console.error('Error crítico en findAll:', err);
+
+      if (err instanceof InternalServerErrorException) {
+        throw err;
+      }
+
       throw new InternalServerErrorException(
         'Error interno al obtener niñeras',
       );
     }
   }
 
+  // Retorna el detalle de una niñera por su ID
   async findOne(id: string) {
     try {
       const { data, error } = await this.supabaseService
@@ -66,81 +72,127 @@ export class NinerasService {
           experiencia,
           verificada,
           presentacion,
-          persona:persona_id ( 
-            id, 
-            nombre, 
-            apellido, 
+          persona:persona_id (
+            id,
+            nombre,
+            apellido,
             foto_url,
-            direccion:id_direccion( 
+            direccion:id_direccion (
               id,
               direccion_completa,
               latitud,
               longitud
             )
           ),
-          habilidades:habilidad_ninera ( nombre ),
-          certificaciones:certificaciones_ninera ( nombre ),
-          disponibilidad:disponibilidad_ninera ( dia_semana, hora_inicio, hora_fin )
+          habilidades:habilidad_ninera (
+            nombre
+          ),
+          certificaciones:certificaciones_ninera (
+            nombre
+          ),
+          disponibilidad:disponibilidad_ninera (
+            dia_semana,
+            hora_inicio,
+            hora_fin
+          )
         `,
         )
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error de Supabase en findOne:', error);
-        throw new NotFoundException(`La niñera no existe o error en consulta`);
+        throw new InternalServerErrorException(
+          `Error de base de datos: ${error.message}`,
+        );
       }
+
+      if (!data) {
+        throw new NotFoundException('La niñera no existe');
+      }
+
       return data;
     } catch (err) {
       console.error('Error crítico en findOne:', err);
+
+      if (
+        err instanceof NotFoundException ||
+        err instanceof InternalServerErrorException
+      ) {
+        throw err;
+      }
+
       throw new InternalServerErrorException('Error al cargar el detalle');
     }
   }
 
-  // 2. Corregido findOneByUsuario (Perfil propio de la niñera)
+  // Retorna el perfil propio de la niñera usando usuario_id
   async findOneByUsuario(usuarioId: string) {
-  const client = this.supabaseService.getAdminClient();
+    const client = this.supabaseService.getAdminClient();
 
-  const { data, error } = await client
-    .from('ninera')
-    .select(`
-      id,
-      tarifa,
-      experiencia,
-      verificada,
-      presentacion,
-      persona:persona_id (
-        id,
-        nombre,
-        apellido,
-        foto_url,
-        id_direccion,
-        direccion:id_direccion (
-          direccion_completa,
-          latitud,
-          longitud
+    try {
+      const { data, error } = await client
+        .from('ninera')
+        .select(
+          `
+          id,
+          tarifa,
+          experiencia,
+          verificada,
+          presentacion,
+          persona:persona_id (
+            id,
+            nombre,
+            apellido,
+            foto_url,
+            id_direccion,
+            direccion:id_direccion (
+              direccion_completa,
+              latitud,
+              longitud
+            )
+          ),
+          usuario:usuario_id (
+            correo
+          ),
+          habilidades:habilidad_ninera (
+            nombre
+          ),
+          certificaciones:certificaciones_ninera (
+            nombre
+          )
+        `,
         )
-      ),
-      usuario:usuario_id (
-        correo
-      ),
-      habilidades:habilidad_ninera (
-        nombre
-      ),
-      certificaciones:certificaciones_ninera (
-        nombre
-      )
-    `)
-    .eq('usuario_id', usuarioId)
-    .single();
+        .eq('usuario_id', usuarioId)
+        .maybeSingle();
 
-  if (error) {
-    console.error('Error de Supabase en findOneByUsuario:', error);
-    throw new NotFoundException('No se encontró el perfil');
+      if (error) {
+        console.error('Error de Supabase en findOneByUsuario:', error);
+        throw new InternalServerErrorException(
+          `Error de base de datos: ${error.message}`,
+        );
+      }
+
+      if (!data) {
+        throw new NotFoundException('No se encontró el perfil');
+      }
+
+      return data;
+    } catch (err) {
+      console.error('Error crítico en findOneByUsuario:', err);
+
+      if (
+        err instanceof NotFoundException ||
+        err instanceof InternalServerErrorException
+      ) {
+        throw err;
+      }
+
+      throw new InternalServerErrorException('Error al obtener el perfil');
+    }
   }
 
-  return data;
-}
+  // Actualiza la foto de perfil de la niñera a partir del usuario_id
   async updateFotoPerfil(usuarioId: string, foto: Express.Multer.File) {
     const client = this.supabaseService.getAdminClient();
 
@@ -148,58 +200,93 @@ export class NinerasService {
       throw new NotFoundException('No se recibió ninguna imagen');
     }
 
-    const { data: ninera, error: nineraError } = await client
-      .from('ninera')
-      .select('id, persona_id')
-      .eq('usuario_id', usuarioId)
-      .single();
+    try {
+      const { data: ninera, error: nineraError } = await client
+        .from('ninera')
+        .select('id, persona_id')
+        .eq('usuario_id', usuarioId)
+        .maybeSingle();
 
-    if (nineraError || !ninera) {
-      throw new NotFoundException('No se encontró la niñera');
-    }
+      if (nineraError) {
+        console.error('Error buscando niñera en updateFotoPerfil:', nineraError);
+        throw new InternalServerErrorException(
+          `Error de base de datos: ${nineraError.message}`,
+        );
+      }
 
-    const fileName = `perfil-${usuarioId}-${Date.now()}-${foto.originalname.replace(/\s/g, '_')}`;
+      if (!ninera) {
+        throw new NotFoundException('No se encontró la niñera');
+      }
 
-    const { error: uploadError } = await client.storage
-      .from('documentos')
-      .upload(fileName, foto.buffer, {
-        contentType: foto.mimetype,
-        upsert: true,
-      });
+      // Se normaliza el nombre del archivo para evitar caracteres problemáticos
+      const safeOriginalName = foto.originalname.replace(/[^\w.\-]/g, '_');
+      const fileName = `perfil-${usuarioId}-${Date.now()}-${safeOriginalName}`;
 
-    if (uploadError) {
+      const { error: uploadError } = await client.storage
+        .from('documentos')
+        .upload(fileName, foto.buffer, {
+          contentType: foto.mimetype,
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error('Error subiendo imagen en updateFotoPerfil:', uploadError);
+        throw new InternalServerErrorException(
+          `Error subiendo imagen: ${uploadError.message}`,
+        );
+      }
+
+      const {
+        data: { publicUrl },
+      } = client.storage.from('documentos').getPublicUrl(fileName);
+
+      if (!publicUrl) {
+        throw new InternalServerErrorException(
+          'No se pudo obtener la URL pública de la imagen',
+        );
+      }
+
+      const { error: updateError } = await client
+        .from('persona')
+        .update({ foto_url: publicUrl })
+        .eq('id', ninera.persona_id);
+
+      if (updateError) {
+        console.error(
+          'Error actualizando foto_url en updateFotoPerfil:',
+          updateError,
+        );
+        throw new InternalServerErrorException(
+          `Error actualizando foto: ${updateError.message}`,
+        );
+      }
+
+      return {
+        message: 'Foto de perfil actualizada correctamente',
+        foto_url: publicUrl,
+      };
+    } catch (err) {
+      console.error('Error crítico en updateFotoPerfil:', err);
+
+      if (
+        err instanceof NotFoundException ||
+        err instanceof InternalServerErrorException
+      ) {
+        throw err;
+      }
+
       throw new InternalServerErrorException(
-        `Error subiendo imagen: ${uploadError.message}`,
+        'Error interno al actualizar la foto de perfil',
       );
     }
-
-    const publicUrl = client.storage.from('documentos').getPublicUrl(fileName)
-      .data.publicUrl;
-
-    const { error: updateError } = await client
-      .from('persona')
-      .update({ foto_url: publicUrl })
-      .eq('id', ninera.persona_id);
-
-    if (updateError) {
-      throw new InternalServerErrorException(
-        `Error actualizando foto: ${updateError.message}`,
-      );
-    }
-
-    return {
-      message: 'Foto de perfil actualizada correctamente',
-      foto_url: publicUrl,
-    };
   }
 
-  /////..................HORARIOS DISPONIBLES
-
+  // Retorna bloques horarios disponibles de una niñera para una fecha dada
   async getAvailableSlots(dto: Disponibilidad_reserva) {
     const { nineraId, fecha } = dto;
     const client = this.supabaseService.getAdminClient();
 
-    // 1. Mapeo de días en español coincidente con tu Base de Datos
+    // Mapeo de días en español según el valor esperado en base de datos
     const diasSemanas = [
       'Domingo',
       'Lunes',
@@ -210,59 +297,106 @@ export class NinerasService {
       'Sábado',
     ];
 
-    const [year, month, day] = fecha.split('-').map(Number);
-    const dateObj = new Date(year, month - 1, day);
-    const diaSemanaNombre = diasSemanas[dateObj.getDay()];
+    try {
+      const [year, month, day] = fecha.split('-').map(Number);
 
-    console.log(
-      `Consulta Nani: ${fecha} -> Detectado como: ${diaSemanaNombre}`,
-    );
+      if (!year || !month || !day) {
+        throw new InternalServerErrorException(
+          'La fecha recibida no tiene un formato válido',
+        );
+      }
 
-    // 3. Obtener el horario base de la niñera para ese día específico
-    const { data: horarioBase, error: errorBase } = await client
-      .from('disponibilidad_ninera')
-      .select('hora_inicio, hora_fin')
-      .eq('ninera_id', nineraId)
-      .eq('dia_semana', diaSemanaNombre)
-      .maybeSingle();
+      const dateObj = new Date(year, month - 1, day);
+      const diaSemanaNombre = diasSemanas[dateObj.getDay()];
 
-    // Si no hay horario configurado (ej: Domingo), retornamos vacío de inmediato
-    if (errorBase || !horarioBase) {
-      return [];
+      console.log(
+        `Consulta Nani: ${fecha} -> Detectado como: ${diaSemanaNombre}`,
+      );
+
+      // Obtiene el horario configurado para ese día
+      const { data: horarioBase, error: errorBase } = await client
+        .from('disponibilidad_ninera')
+        .select('hora_inicio, hora_fin')
+        .eq('ninera_id', nineraId)
+        .eq('dia_semana', diaSemanaNombre)
+        .maybeSingle();
+
+      if (errorBase) {
+        console.error(
+          'Error obteniendo horario base en getAvailableSlots:',
+          errorBase,
+        );
+        throw new InternalServerErrorException(
+          `Error de base de datos: ${errorBase.message}`,
+        );
+      }
+
+      // Si no existe horario configurado para ese día, retorna vacío
+      if (!horarioBase) {
+        return [];
+      }
+
+      // Obtiene reservas activas para esa fecha
+      const { data: reservas, error: reservasError } = await client
+        .from('reserva')
+        .select('hora_inicio, hora_fin')
+        .eq('ninera_id', nineraId)
+        .eq('fecha_servicio', fecha)
+        .neq('estado', 'cancelado');
+
+      if (reservasError) {
+        console.error(
+          'Error obteniendo reservas en getAvailableSlots:',
+          reservasError,
+        );
+        throw new InternalServerErrorException(
+          `Error de base de datos: ${reservasError.message}`,
+        );
+      }
+
+      const slots: { time: string; status: 'occupied' | 'available' }[] = [];
+
+      const inicio = parseInt(horarioBase.hora_inicio.split(':')[0], 10);
+      const fin = parseInt(horarioBase.hora_fin.split(':')[0], 10);
+
+      if (Number.isNaN(inicio) || Number.isNaN(fin)) {
+        throw new InternalServerErrorException(
+          'El horario configurado no tiene un formato válido',
+        );
+      }
+
+      // Genera bloques por hora dentro del rango configurado
+      for (let hora = inicio; hora < fin; hora++) {
+        const horaStr = `${hora.toString().padStart(2, '0')}:00`;
+
+        const estaOcupado = (reservas ?? []).some((res) => {
+          const resInicio = parseInt(res.hora_inicio.split(':')[0], 10);
+          const resFin = parseInt(res.hora_fin.split(':')[0], 10);
+
+          if (Number.isNaN(resInicio) || Number.isNaN(resFin)) {
+            return false;
+          }
+
+          return hora >= resInicio && hora < resFin;
+        });
+
+        slots.push({
+          time: horaStr,
+          status: estaOcupado ? 'occupied' : 'available',
+        });
+      }
+
+      return slots;
+    } catch (err) {
+      console.error('Error crítico en getAvailableSlots:', err);
+
+      if (err instanceof InternalServerErrorException) {
+        throw err;
+      }
+
+      throw new InternalServerErrorException(
+        'Error interno al obtener horarios disponibles',
+      );
     }
-
-    // 4. Obtener reservas que ya existen para ese día y esa niñera
-    const { data: reservas } = await client
-      .from('reserva')
-      .select('hora_inicio, hora_fin')
-      .eq('ninera_id', nineraId)
-      .eq('fecha_servicio', fecha)
-      .neq('estado', 'cancelado');
-
-    const slots: { time: string; status: 'occupied' | 'available' }[] = [];
-
-    // 5. Generar los bloques de horas (Slots)
-    // Convertimos "08:00:00" a número 8
-    const inicio = parseInt(horarioBase.hora_inicio.split(':')[0]);
-    const fin = parseInt(horarioBase.hora_fin.split(':')[0]);
-
-    for (let hora = inicio; hora <= fin; hora++) {
-      const horaStr = `${hora.toString().padStart(2, '0')}:00`;
-
-      // Verificamos si esta hora cae dentro del rango de alguna reserva existente
-      const estaOcupado = (reservas || []).some((res) => {
-        const resInicio = parseInt(res.hora_inicio.split(':')[0]);
-        const resFin = parseInt(res.hora_fin.split(':')[0]);
-        // Si la hora actual está entre el inicio y el fin de una reserva
-        return hora >= resInicio && hora < resFin;
-      });
-
-      slots.push({
-        time: horaStr,
-        status: estaOcupado ? 'occupied' : 'available',
-      });
-    }
-
-    return slots;
   }
 }

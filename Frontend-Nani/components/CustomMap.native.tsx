@@ -1,14 +1,27 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import MapView from "react-native-maps";
+import MapView, { Region } from "react-native-maps";
 
+/**
+ * Props del componente CustomMap
+ */
 interface CustomMapProps {
+  // Estilos opcionales para el contenedor
   style?: any;
-  region: any;
-  onRegionChangeComplete?: (region: any) => void;
+
+  // Región inicial o actual del mapa
+  region: Region;
+
+  // Callback que se ejecuta cuando el usuario deja de mover el mapa
+  onRegionChangeComplete?: (region: Region) => void;
+
+  // Indica si se muestra la ubicación del usuario
   showsUserLocation?: boolean;
 }
 
+/**
+ * Componente que renderiza un mapa interactivo usando react-native-maps
+ */
 export default function CustomMap({
   style,
   region,
@@ -28,6 +41,7 @@ export default function CustomMap({
 }
 
 const styles = StyleSheet.create({
+  // Contenedor del mapa
   container: {
     flex: 1,
     overflow: "hidden",

@@ -1,5 +1,7 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ENDPOINTS } from "../../../constants/apiConfig";
 import { router, useLocalSearchParams } from "expo-router";
 import { MapPin } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -19,6 +21,8 @@ export default function QRScanner() {
 
   const {
     bookingId,
+    bookingCode,
+    bookingStatus,
     type,
     address,
     latitude,
@@ -30,6 +34,13 @@ export default function QRScanner() {
     checkInTime,
     children,
     childrenDetails,
+    date,
+    time,
+    scheduledStart,
+    scheduledEnd,
+    payment,
+    paymentMethod,
+    notes,
   } = useLocalSearchParams();
 
   useEffect(() => {
@@ -64,6 +75,55 @@ export default function QRScanner() {
     String(latitude).trim() !== "" &&
     String(longitude).trim() !== "";
 
+  const getCheckInStorageKey = () => `booking_checkin_${String(bookingId || "")}`;
+
+  const saveCheckInTime = async (value: string) => {
+    if (!bookingId) return;
+    await AsyncStorage.setItem(getCheckInStorageKey(), value);
+  };
+
+  const getStoredCheckInTime = async () => {
+    if (!bookingId) return null;
+    return AsyncStorage.getItem(getCheckInStorageKey());
+  };
+
+  const clearStoredCheckInTime = async () => {
+    if (!bookingId) return;
+    await AsyncStorage.removeItem(getCheckInStorageKey());
+  };
+
+  const isQrValidForCurrentBooking = (qrData: any) => {
+    if (!qrData || typeof qrData !== "object") return false;
+
+    if (qrData.type !== type) {
+      return false;
+    }
+
+    // Si el QR trae bookingId, se valida contra la reserva actual
+    if (qrData.bookingId && String(qrData.bookingId) !== String(bookingId || "")) {
+      return false;
+    }
+
+    // Si el QR trae codigo_reserva o bookingCode, se valida también
+    if (
+      qrData.codigo_reserva &&
+      bookingCode &&
+      String(qrData.codigo_reserva) !== String(bookingCode)
+    ) {
+      return false;
+    }
+
+    if (
+      qrData.bookingCode &&
+      bookingCode &&
+      String(qrData.bookingCode) !== String(bookingCode)
+    ) {
+      return false;
+    }
+
+    return true;
+  };
+
   const handleScan = async ({ data }: any) => {
     if (scanned || checkingLocation) return;
 
@@ -73,8 +133,8 @@ export default function QRScanner() {
     try {
       const qrData = JSON.parse(data);
 
-      if (qrData.type !== type) {
-        setError("Este QR no corresponde a esta acción.");
+      if (!isQrValidForCurrentBooking(qrData)) {
+        setError("Este QR no corresponde a esta reserva o acción.");
         setScanned(false);
         return;
       }
@@ -83,6 +143,7 @@ export default function QRScanner() {
         setCheckingLocation(true);
 
         const { status } = await Location.requestForegroundPermissionsAsync();
+
         if (status !== "granted") {
           setError("Debes permitir acceso a la ubicación.");
           setCheckingLocation(false);
@@ -99,6 +160,7 @@ export default function QRScanner() {
           Number(longitude)
         );
 
+        // 0.1 km = 100 metros
         if (distance > 0.1) {
           setError("No estás en la ubicación correcta.");
           setCheckingLocation(false);
@@ -110,10 +172,44 @@ export default function QRScanner() {
       setCheckingLocation(false);
 
       if (type === "checkin") {
+        const now = Date.now().toString();
+
+        try {
+          const response = await fetch(
+            ENDPOINTS.procesar_checkin(bookingId as string),
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                checkInTime: now,
+                qrCode: qrData?.code || null,
+              }),
+            }
+          );
+        
+          const data = await response.json();
+        
+          if (!response.ok) {
+            throw new Error(data?.message || "Error en check-in");
+          }
+        } catch (err: any) {
+          setError(err?.message || "Error registrando entrada");
+          setScanned(false);
+          return;
+        }
+      
+        // Guardado local (fallback)
+        await saveCheckInTime(now);
+      
         router.replace({
-          pathname: "./ActiveSession",
+          pathname: "./JobTracking",
           params: {
             bookingId,
+            bookingCode,
+            bookingStatus: "en_progreso",
+            scanMode: "checkout", // 🔥 clave
             clientName,
             clientPhoto,
             address,
@@ -123,30 +219,97 @@ export default function QRScanner() {
             childrenDetails,
             latitude,
             longitude,
-            checkInTime: Date.now().toString(),
+            checkInTime: now,
+            date,
+            time,
+            scheduledStart,
+            scheduledEnd,
+            payment,
+            paymentMethod,
+            notes,
           },
         });
+      
         return;
       }
 
       if (type === "checkout") {
+        const storedCheckInTime = await getStoredCheckInTime();
+        const effectiveCheckInTime =
+          String(checkInTime || "").trim() !== ""
+            ? String(checkInTime)
+            : storedCheckInTime;
+
+        if (!effectiveCheckInTime || Number(effectiveCheckInTime) <= 0) {
+          setError("No se encontró la hora de entrada de esta sesión.");
+          setScanned(false);
+          return;
+        }
+
         const now = Date.now();
-        const totalHours =
-          checkInTime && Number(checkInTime) > 0
-            ? ((now - Number(checkInTime)) / 1000 / 3600).toString()
-            : "0";
+        const totalHours = (
+          (now - Number(effectiveCheckInTime)) /
+          1000 /
+          3600
+        ).toString();
+
+        await clearStoredCheckInTime();
+
+        try {
+          const response = await fetch(
+            ENDPOINTS.procesar_checkout(bookingId as string),
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                checkOutTime: now.toString(),
+                totalHours,
+              }),
+            }
+          );
+        
+          const data = await response.json();
+        
+          if (!response.ok) {
+            throw new Error(data?.message || "Error en checkout");
+          }
+        } catch (err: any) {
+          setError(err?.message || "Error registrando salida");
+          setScanned(false);
+          return;
+        }
 
         router.replace({
           pathname: "./SessionSummary",
           params: {
             bookingId,
+            bookingCode,
+            bookingStatus: "completada",
             clientName,
+            nombreCliente: clientName,
             clientPhoto,
             scheduledHours,
             hourlyRate,
-            checkInTime,
+            checkInTime: String(effectiveCheckInTime),
             checkOutTime: now.toString(),
             totalHours,
+            children,
+            childrenDetails,
+            address,
+            ubicacion: address,
+            payment,
+            paymentMethod,
+            date,
+            fecha: date,
+            time,
+            scheduledStart,
+            horaInicio: scheduledStart,
+            scheduledEnd,
+            horaFin: scheduledEnd,
+            notes,
+            estado: "completada",
           },
         });
       }
@@ -201,11 +364,23 @@ export default function QRScanner() {
         </View>
       )}
 
-      <View style={styles.locationBox}>
-        <MapPin size={18} color="#FF768A" />
-        <Text style={styles.locationText}>
-          {String(address || "Ubicación no disponible")}
+      <View style={styles.infoBox}>
+        <Text style={styles.infoTitle}>
+          {type === "checkout" ? "Escaneo de salida" : "Escaneo de llegada"}
         </Text>
+
+        {!!bookingStatus && (
+          <Text style={styles.infoText}>
+            Estado actual: {String(bookingStatus)}
+          </Text>
+        )}
+
+        <View style={styles.locationBox}>
+          <MapPin size={18} color="#FF768A" />
+          <Text style={styles.locationText}>
+            {String(address || "Ubicación no disponible")}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -214,33 +389,54 @@ export default function QRScanner() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   camera: { flex: 1 },
+
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
   },
-  locationBox: {
+
+  infoBox: {
     position: "absolute",
-    bottom: 40,
+    bottom: 30,
     left: 20,
     right: 20,
     backgroundColor: "#fff",
     padding: 15,
     borderRadius: 12,
+    gap: 8,
+  },
+
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+
+  infoText: {
+    fontSize: 13,
+    color: "#666",
+  },
+
+  locationBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    marginTop: 4,
   },
+
   locationText: {
     fontSize: 14,
     flex: 1,
   },
+
   errorText: {
     color: "red",
     marginBottom: 12,
     textAlign: "center",
   },
+
   retryButton: {
     backgroundColor: "#886BC1",
     paddingHorizontal: 16,
@@ -248,6 +444,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 10,
   },
+
   retryText: {
     color: "white",
     fontWeight: "600",

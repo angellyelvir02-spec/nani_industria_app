@@ -17,21 +17,26 @@ import { Disponibilidad_reserva } from './dto/disponibilidad.dto';
 export class NinerasController {
   constructor(private readonly ninerasService: NinerasService) {}
 
+  // Retorna todas las niñeras verificadas
   @Get()
   async getAllNineras() {
     return this.ninerasService.findAll();
   }
 
+  // Retorna el perfil de la niñera asociado a un usuario
   @Get('/usuario/:usuarioId')
-  async findByUsuario(@Param('usuarioId') usuarioId: string) {
-    return await this.ninerasService.findOneByUsuario(usuarioId);
+  async findByUsuario(
+    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
+  ) {
+    return this.ninerasService.findOneByUsuario(usuarioId);
   }
 
+  // Actualiza la foto de perfil de la niñera
   @Patch('/foto/:usuarioId')
   @UseInterceptors(
     FileInterceptor('foto', {
       limits: {
-        fileSize: 1024 * 1024 * 3,
+        fileSize: 1024 * 1024 * 3, // 3 MB
       },
       fileFilter: (req, file, callback) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
@@ -42,31 +47,43 @@ export class NinerasController {
             false,
           );
         }
+
         callback(null, true);
       },
     }),
   )
   async updateFotoPerfil(
-    @Param('usuarioId') usuarioId: string,
+    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
     @UploadedFile() foto: Express.Multer.File,
   ) {
+    if (!foto) {
+      throw new BadRequestException('Debe enviar una imagen en el campo "foto"');
+    }
+
     return this.ninerasService.updateFotoPerfil(usuarioId, foto);
   }
 
+  // Retorna el detalle de una niñera por su ID
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return await this.ninerasService.findOne(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.ninerasService.findOne(id);
   }
 
-  //disponibilidad niñera
+  // Retorna la disponibilidad de la niñera para una fecha específica
   @Get(':id/availability')
   async getAvailability(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('fecha') fecha: string,
   ) {
+    if (!fecha) {
+      throw new BadRequestException(
+        'El parámetro "fecha" es obligatorio',
+      );
+    }
+
     const dto: Disponibilidad_reserva = {
       nineraId: id,
-      fecha: fecha,
+      fecha,
     };
 
     return this.ninerasService.getAvailableSlots(dto);

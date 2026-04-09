@@ -1,404 +1,171 @@
-import { router, useLocalSearchParams } from "expo-router";
-import {
-  AlertCircle,
-  ArrowLeft,
-  CheckCircle,
-  Clock,
-  DollarSign,
-  MessageSquare,
-  Star,
-} from "lucide-react-native";
-import { useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { ENDPOINTS } from "../../../constants/apiConfig";
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import * as Location from "expo-location";
+import { Ionicons } from "@expo/vector-icons";
 
-export default function SessionSummary() {
-  const {
-    bookingId,
-    clientName,
-    clientPhoto,
-    scheduledHours,
-    hourlyRate,
-    checkInTime,
-    checkOutTime,
-    totalHours,
-  } = useLocalSearchParams();
-
-  const [rating, setRating] = useState(5);
-  const [comments, setComments] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const checkInDate = new Date(Number(checkInTime));
-  const checkOutDate = new Date(Number(checkOutTime));
-
-  const scheduled = Number(scheduledHours) || 0;
-  const rate = Number(hourlyRate) || 0;
-
-  const workedHours =
-    totalHours !== undefined && totalHours !== null && totalHours !== ""
-      ? Number(totalHours)
-      : Math.max(0, (Number(checkOutTime) - Number(checkInTime)) / 3600000);
-
-  const overtimeHours = Math.max(0, workedHours - scheduled);
-
-  const basePay = scheduled * rate;
-  const overtimePay = overtimeHours * rate;
-  const totalPayment = basePay + overtimePay;
-
-  const formatTime = (date: Date) => {
-    if (isNaN(date.getTime())) return "--:--";
-    return date.toLocaleTimeString("es-ES", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+interface ActiveSessionProps {
+  data?: {
+    nombreCliente?: string;
+    direccion?: string;
+    latitude?: number;
+    longitude?: number;
   };
+  onScanQR: (type: "checkin" | "checkout", location: any) => void;
+}
 
-  const formatDuration = (hours: number) => {
-    if (!isFinite(hours) || hours < 0) return "0h 0m";
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
-    return `${h}h ${m}m`;
-  };
+export default function ActiveSession({ data, onScanQR }: ActiveSessionProps) {
+  const [location, setLocation] = useState<any>(null);
+  const [loadingLocation, setLoadingLocation] = useState(true);
 
-  const handleSubmit = async () => {
-    if (!bookingId) {
-      Alert.alert("Error", "No se encontró el ID de la reserva.");
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== "granted") {
+        Alert.alert("Permiso requerido", "Necesitamos acceso a tu ubicación");
+        setLoadingLocation(false);
+        return;
+      }
+
+      let loc = await Location.getCurrentPositionAsync({});
+      setLocation(loc.coords);
+      setLoadingLocation(false);
+    })();
+  }, []);
+
+  const handleScan = (type: "checkin" | "checkout") => {
+    if (!location) {
+      Alert.alert("Ubicación no disponible", "Intenta nuevamente");
       return;
     }
 
-    try {
-      setSubmitting(true);
-
-      const response = await fetch(
-        ENDPOINTS.procesar_checkout(bookingId as string),
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            rating,
-            comments,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Error al procesar el checkout");
-      }
-
-      Alert.alert("Éxito", "Sesión finalizada correctamente.");
-      router.replace("./BabysitterDashboard");
-    } catch (error: any) {
-      Alert.alert(
-        "Error",
-        error?.message || "Error al finalizar la sesión."
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    onScanQR(type, location);
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.replace("./BabysitterDashboard")}
-        >
-          <ArrowLeft color="#fff" size={20} />
-        </TouchableOpacity>
+    <View style={styles.container}>
+      <Text style={styles.title}>Sesión activa</Text>
 
-        <Text style={styles.headerTitle}>Resumen de Sesión</Text>
-        <Text style={styles.headerSubtitle}>Trabajo completado</Text>
-
-        <View style={styles.successBox}>
-          <CheckCircle color="#fff" size={24} />
-          <View>
-            <Text style={styles.successTitle}>Sesión Finalizada</Text>
-            <Text style={styles.successText}>Reserva #{bookingId}</Text>
-          </View>
-        </View>
+      <View style={styles.card}>
+        <Item
+          icon="person-outline"
+          label="Cliente"
+          value={data?.nombreCliente || "No disponible"}
+        />
+        <Item
+          icon="location-outline"
+          label="Dirección"
+          value={data?.direccion || "No disponible"}
+        />
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Image
-              source={{
-                uri:
-                  (clientPhoto as string) ||
-                  "https://via.placeholder.com/150",
-              }}
-              style={styles.avatar}
-            />
-            <View>
-              <Text style={styles.clientName}>
-                {clientName || "Cliente"}
-              </Text>
-              <Text style={styles.grayText}>Cliente</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Clock color="#886BC1" size={20} />
-            <Text style={styles.cardTitle}>Registro de Tiempo</Text>
-          </View>
-
-          <View style={styles.timeRow}>
-            <View>
-              <Text style={styles.label}>Hora de entrada</Text>
-              <Text style={styles.value}>{formatTime(checkInDate)}</Text>
-            </View>
-
-            <View>
-              <Text style={styles.label}>Hora de salida</Text>
-              <Text style={styles.value}>{formatTime(checkOutDate)}</Text>
-            </View>
-          </View>
-
-          <View style={styles.totalTime}>
-            <Text style={styles.grayText}>Tiempo total trabajado</Text>
-            <Text style={styles.totalHours}>{formatDuration(workedHours)}</Text>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <DollarSign color="#886BC1" size={20} />
-            <Text style={styles.cardTitle}>Desglose de Pago</Text>
-          </View>
-
-          <View style={styles.paymentRow}>
-            <Text>Horas programadas ({scheduled}h)</Text>
-            <Text>${basePay.toFixed(2)}</Text>
-          </View>
-
-          {overtimeHours > 0 && (
-            <View style={styles.paymentRow}>
-              <Text style={{ color: "#EA580C" }}>
-                Horas extra ({formatDuration(overtimeHours)})
-              </Text>
-              <Text style={{ color: "#EA580C" }}>
-                +${overtimePay.toFixed(2)}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.totalPaymentRow}>
-            <Text style={styles.totalLabel}>Total estimado</Text>
-            <Text style={styles.totalPayment}>${totalPayment.toFixed(2)}</Text>
-          </View>
-        </View>
-
-        {overtimeHours > 0 && (
-          <View style={styles.noticeBox}>
-            <AlertCircle color="#FF768A" size={20} />
-            <Text style={styles.noticeText}>
-              Se trabajó {formatDuration(overtimeHours)} extra.
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Star color="#886BC1" size={20} />
-            <Text style={styles.cardTitle}>Calificar al Cliente</Text>
-          </View>
-
-          <View style={styles.stars}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity key={star} onPress={() => setRating(star)}>
-                <Star
-                  size={36}
-                  color={star <= rating ? "#FF768A" : "#CCC"}
-                  fill={star <= rating ? "#FF768A" : "none"}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <MessageSquare color="#886BC1" size={20} />
-            <Text style={styles.cardTitle}>Comentarios</Text>
-          </View>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Comparte tu experiencia..."
-            multiline
-            value={comments}
-            onChangeText={setComments}
-          />
-        </View>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Acciones</Text>
 
         <TouchableOpacity
-          style={[
-            styles.submitBtn,
-            submitting && { opacity: 0.7 },
-          ]}
-          onPress={handleSubmit}
-          disabled={submitting}
+          style={styles.button}
+          onPress={() => handleScan("checkin")}
         >
-          {submitting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.submitText}>Finalizar y Enviar</Text>
-          )}
+          <Ionicons name="qr-code-outline" size={20} color="#fff" />
+          <Text style={styles.buttonText}>Escanear QR (Entrada)</Text>
         </TouchableOpacity>
 
-        <View style={styles.infoBox}>
-          <Text style={styles.infoText}>
-            El pago será depositado en tu cuenta en 24-48 horas.
-          </Text>
-        </View>
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: "#f44336" }]}
+          onPress={() => handleScan("checkout")}
+        >
+          <Ionicons name="qr-code-outline" size={20} color="#fff" />
+          <Text style={styles.buttonText}>Escanear QR (Salida)</Text>
+        </TouchableOpacity>
       </View>
-    </ScrollView>
+
+      <View style={styles.locationBox}>
+        <Text style={styles.locationText}>
+          {loadingLocation
+            ? "Obteniendo ubicación..."
+            : location
+              ? `Lat: ${location.latitude.toFixed(4)}, Lng: ${location.longitude.toFixed(4)}`
+              : "Ubicación no disponible"}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function Item({ icon, label, value }: any) {
+  return (
+    <View style={styles.item}>
+      <Ionicons name={icon} size={20} color="#555" />
+      <View style={{ marginLeft: 10 }}>
+        <Text style={styles.label}>{label}</Text>
+        <Text style={styles.value}>{value}</Text>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FAFAFA" },
-
-  header: {
-    backgroundColor: "#886BC1",
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+  container: {
+    flex: 1,
+    padding: 20,
+    backgroundColor: "#f5f5f5",
   },
-
-  backBtn: { marginBottom: 10 },
-
-  headerTitle: { color: "#fff", fontSize: 22, fontWeight: "bold" },
-
-  headerSubtitle: { color: "#fff", opacity: 0.8 },
-
-  successBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 20,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    padding: 15,
-    borderRadius: 20,
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 15,
+    textAlign: "center",
   },
-
-  successTitle: { color: "#fff", fontWeight: "600" },
-
-  successText: { color: "#fff", opacity: 0.8 },
-
-  content: { padding: 20, gap: 20 },
-
   card: {
     backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 20,
-  },
-
-  row: { flexDirection: "row", alignItems: "center", gap: 8 },
-
-  avatar: { width: 60, height: 60, borderRadius: 30 },
-
-  clientName: { fontSize: 18, fontWeight: "600" },
-
-  grayText: { color: "#666" },
-
-  cardTitle: { fontSize: 16, fontWeight: "600" },
-
-  label: { fontSize: 12, color: "#888" },
-
-  value: { fontSize: 16 },
-
-  timeRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 15,
-  },
-
-  totalTime: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 15,
-  },
-
-  totalHours: { color: "#886BC1", fontSize: 20, fontWeight: "bold" },
-
-  paymentRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-
-  totalPaymentRow: {
-    borderTopWidth: 1,
-    borderColor: "#eee",
-    marginTop: 10,
-    paddingTop: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-
-  totalLabel: { fontSize: 18, fontWeight: "600" },
-
-  totalPayment: { fontSize: 26, fontWeight: "bold", color: "#886BC1" },
-
-  noticeBox: {
-    flexDirection: "row",
-    gap: 8,
-    backgroundColor: "#FFF1F2",
-    padding: 15,
     borderRadius: 15,
+    padding: 15,
+    elevation: 3,
+    marginBottom: 20,
   },
-
-  noticeText: { fontSize: 12, color: "#444", flex: 1 },
-
-  stars: {
+  item: {
     flexDirection: "row",
-    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  label: {
+    fontSize: 13,
+    color: "#888",
+  },
+  value: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  section: {
     marginTop: 10,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  button: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
     gap: 10,
   },
-
-  input: {
-    marginTop: 10,
-    backgroundColor: "#F5F5F5",
-    borderRadius: 15,
-    padding: 12,
-    height: 100,
-    textAlignVertical: "top",
+  buttonText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
-
-  submitBtn: {
-    backgroundColor: "#FF768A",
-    padding: 16,
-    borderRadius: 20,
-    alignItems: "center",
+  locationBox: {
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 10,
   },
-
-  submitText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-
-  infoBox: {
-    backgroundColor: "#F6D9F1",
-    padding: 15,
-    borderRadius: 15,
+  locationText: {
+    fontSize: 13,
+    textAlign: "center",
   },
-
-  infoText: { textAlign: "center", fontSize: 12, color: "#555" },
 });

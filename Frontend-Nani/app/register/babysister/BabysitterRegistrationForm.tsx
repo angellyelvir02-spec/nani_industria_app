@@ -14,10 +14,10 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
-import { ENDPOINTS } from '../../../constants/apiConfig';
+import { API_URL, ENDPOINTS } from "../../../constants/apiConfig";
 
 export default function BabysitterRegistrationForm() {
   const router = useRouter();
@@ -40,8 +40,7 @@ export default function BabysitterRegistrationForm() {
     "9 años",
     "10+ años",
   ];
-  
-  // ESTADO NUEVO: Mensajes de error
+
   const [errors, setErrors] = useState<any>({});
   const [loading, setLoading] = useState(false);
 
@@ -71,7 +70,6 @@ export default function BabysitterRegistrationForm() {
     facePhoto: null as any,
   });
 
-  // ACTUALIZADO: Limpia el error cuando el usuario edita el campo
   const handleInputChange = (field: string, value: string) => {
     setFormData({ ...formData, [field]: value });
     if (errors[field]) {
@@ -79,7 +77,6 @@ export default function BabysitterRegistrationForm() {
     }
   };
 
-  // NUEVO: Validación en tiempo real (OnBlur)
   const validateField = (field: string, value: string) => {
     let error = null;
 
@@ -87,7 +84,7 @@ export default function BabysitterRegistrationForm() {
       const nombres = value.trim().split(/\s+/);
       if (nombres.length < 2 || nombres[0] === "") {
         error = "Ingresa tus dos nombres.";
-      } else if (!nombres.every(nombre => /^[A-ZÁÉÍÓÚÑ]/.test(nombre))) {
+      } else if (!nombres.every((nombre) => /^[A-ZÁÉÍÓÚÑ]/.test(nombre))) {
         error = "Cada nombre debe iniciar con mayúscula.";
       }
     }
@@ -96,22 +93,27 @@ export default function BabysitterRegistrationForm() {
       const apellidos = value.trim().split(/\s+/);
       if (apellidos.length < 2 || apellidos[0] === "") {
         error = "Ingresa tus dos apellidos.";
-      } else if (!apellidos.every(apellido => /^[A-ZÁÉÍÓÚÑ]/.test(apellido))) {
+      } else if (!apellidos.every((apellido) => /^[A-ZÁÉÍÓÚÑ]/.test(apellido))) {
         error = "Cada apellido debe iniciar con mayúscula.";
       }
     }
 
     if (field === "email") {
       const emailLimpio = value.trim().toLowerCase();
-      if (!emailLimpio.endsWith("@gmail.com") && !emailLimpio.endsWith("@icloud.com")) {
+      if (
+        !emailLimpio.endsWith("@gmail.com") &&
+        !emailLimpio.endsWith("@icloud.com")
+      ) {
         error = "Solo aceptamos correos @gmail.com o @icloud.com.";
       }
     }
-  if (field === "password") {
-      // Nueva regla: 8 caracteres, Mayúscula, Minúscula, Número y Símbolo
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_])[^\s]{8,}$/;
+
+    if (field === "password") {
+      const passwordRegex =
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_])[^\s]{8,}$/;
       if (!passwordRegex.test(value)) {
-        error = "Mín. 8 caracteres, 1 mayúscula, 1 número y 1 símbolo.";
+        error =
+          "Mín. 8 caracteres, 1 mayúscula, 1 minúscula, 1 número y 1 símbolo.";
       }
     }
 
@@ -123,11 +125,9 @@ export default function BabysitterRegistrationForm() {
       }
     }
 
-if (field === "phone") {
-      // Regex: ^\+504 (empieza con +504) 
-      // \d{4} (4 números) -? (guion opcional) \d{4}$ (otros 4 números al final)
+    if (field === "phone") {
       const phoneRegex = /^\+504\d{4}-?\d{4}$/;
-      
+
       if (!value.trim()) {
         error = "Ingresa tu número de teléfono.";
       } else if (!phoneRegex.test(value.trim())) {
@@ -137,19 +137,6 @@ if (field === "phone") {
 
     if (field === "location") {
       if (!value.trim()) error = "Ingresa tu ubicación (Ciudad, País).";
-    }
-
-    if (field === "password") {
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_])[^\s]{8,}$/;
-      if (!passwordRegex.test(value)) {
-        error = "Mín. 8 caracteres, 1 mayúscula, 1 minúscula, 1 número y 1 símbolo.";
-      }
-    }
-
-    if (field === "confirmPassword") {
-      if (value !== formData.password) {
-        error = "Las contraseñas no coinciden.";
-      }
     }
 
     setErrors((prev: any) => ({ ...prev, [field]: error }));
@@ -163,30 +150,29 @@ if (field === "phone") {
     return age;
   };
 
- const handleDateChange = (selectedDate: Date) => {
-  setShowDatePicker(false);
+  const handleDateChange = (selectedDate: Date) => {
+    setShowDatePicker(false);
 
-  if (selectedDate) {
-    const age = calculateAge(selectedDate);
-    setFormData({
-      ...formData,
-      // Formateamos la fecha a YYYY-MM-DD para el backend
-      birthDate: selectedDate.toISOString().split('T')[0],
-      age: age.toString(),
-    });
-    
-    // Limpiar error de fecha si existía
-    if (errors.birthDate) {
-      setErrors({ ...errors, birthDate: null });
+    if (selectedDate) {
+      const age = calculateAge(selectedDate);
+      setFormData({
+        ...formData,
+        birthDate: selectedDate.toISOString().split("T")[0],
+        age: age.toString(),
+      });
+
+      if (errors.birthDate) {
+        setErrors({ ...errors, birthDate: null });
+      }
     }
-  }
-};
+  };
 
   const pickImage = async (field: string) => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.7,
     });
+
     if (!result.canceled) {
       setFormData({ ...formData, [field]: result.assets[0] });
     }
@@ -198,10 +184,12 @@ if (field === "phone") {
       alert("Se necesita permiso para usar la cámara");
       return;
     }
+
     const result = await ImagePicker.launchCameraAsync({
       cameraType: ImagePicker.CameraType.front,
       quality: 0.7,
     });
+
     if (!result.canceled) {
       setFormData({ ...formData, facePhoto: result.assets[0] });
     }
@@ -215,47 +203,66 @@ if (field === "phone") {
   };
 
   const addSkill = () => {
-    if (!skillInput) return;
+    if (!skillInput.trim()) return;
     setFormData({ ...formData, skills: [...formData.skills, skillInput] });
     setSkillInput("");
   };
 
   const addCertificate = () => {
-    if (!certificateInput) return;
-    setFormData({ ...formData, certificates: [...formData.certificates, certificateInput] });
+    if (!certificateInput.trim()) return;
+    setFormData({
+      ...formData,
+      certificates: [...formData.certificates, certificateInput],
+    });
     setCertificateInput("");
   };
 
   const handleNext = async () => {
-    // --- PASO 1: VALIDACIONES COMPUESTAS ---
     if (step === 1) {
       let isValid = true;
       let newErrors: any = {};
 
       const nombres = formData.firstName.trim().split(/\s+/);
-      if (nombres.length < 2 || nombres[0] === "" || !nombres.every(n => /^[A-ZÁÉÍÓÚÑ]/.test(n))) {
+      if (
+        nombres.length < 2 ||
+        nombres[0] === "" ||
+        !nombres.every((n) => /^[A-ZÁÉÍÓÚÑ]/.test(n))
+      ) {
         newErrors.firstName = "Revisa tus nombres.";
         isValid = false;
       }
 
       const apellidos = formData.lastName.trim().split(/\s+/);
-      if (apellidos.length < 2 || apellidos[0] === "" || !apellidos.every(a => /^[A-ZÁÉÍÓÚÑ]/.test(a))) {
+      if (
+        apellidos.length < 2 ||
+        apellidos[0] === "" ||
+        !apellidos.every((a) => /^[A-ZÁÉÍÓÚÑ]/.test(a))
+      ) {
         newErrors.lastName = "Revisa tus apellidos.";
         isValid = false;
       }
-      console.log("Fecha que se envía:", formData.birthDate); 
-// Debería verse exactamente así en consola: 2000-05-15
+
+      console.log("Fecha que se envía:", formData.birthDate);
 
       if (!formData.birthDate) {
-        Alert.alert("Dato faltante", "Por favor selecciona tu fecha de nacimiento.");
+        Alert.alert(
+          "Dato faltante",
+          "Por favor selecciona tu fecha de nacimiento."
+        );
         isValid = false;
       } else if (Number(formData.age) < 18) {
-        Alert.alert("Edad mínima", "Debes ser mayor de 18 años para registrarte como niñera.");
+        Alert.alert(
+          "Edad mínima",
+          "Debes ser mayor de 18 años para registrarte como niñera."
+        );
         isValid = false;
       }
 
       const emailLimpio = formData.email.trim().toLowerCase();
-      if (!emailLimpio.endsWith("@gmail.com") && !emailLimpio.endsWith("@icloud.com")) {
+      if (
+        !emailLimpio.endsWith("@gmail.com") &&
+        !emailLimpio.endsWith("@icloud.com")
+      ) {
         newErrors.email = "Correo inválido.";
         isValid = false;
       }
@@ -270,13 +277,17 @@ if (field === "phone") {
         isValid = false;
       }
 
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_])[^\s]{8,}$/;
+      const passwordRegex =
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_])[^\s]{8,}$/;
       if (!passwordRegex.test(formData.password)) {
         newErrors.password = "Contraseña débil.";
         isValid = false;
       }
 
-      if (formData.password !== formData.confirmPassword || formData.confirmPassword === "") {
+      if (
+        formData.password !== formData.confirmPassword ||
+        formData.confirmPassword === ""
+      ) {
         newErrors.confirmPassword = "Las contraseñas no coinciden.";
         isValid = false;
       }
@@ -284,7 +295,10 @@ if (field === "phone") {
       setErrors(newErrors);
 
       if (!isValid) {
-        Alert.alert("Campos incompletos", "Por favor corrige los errores en rojo antes de avanzar.");
+        Alert.alert(
+          "Campos incompletos",
+          "Por favor corrige los errores en rojo antes de avanzar."
+        );
         return;
       }
 
@@ -292,25 +306,31 @@ if (field === "phone") {
       return;
     }
 
-    // --- PASO 2: AVANZAR ---
     if (step === 2) {
       if (!formData.experience.trim()) {
-        Alert.alert("Campo faltante", "Selecciona tus años de experiencia.");
+        Alert.alert(
+          "Campo faltante",
+          "Selecciona tus años de experiencia."
+        );
         return;
       }
-    
+
       setStep(3);
       return;
     }
 
-    // --- PASO 3: ENVÍO AL BACKEND ---
     if (step === 3) {
       if (!formData.rate.trim()) {
-        Alert.alert("Falta información", "Por favor ingresa tu tarifa por hora.");
+        Alert.alert(
+          "Falta información",
+          "Por favor ingresa tu tarifa por hora."
+        );
         return;
       }
+
       try {
         setLoading(true);
+
         const data = new FormData();
 
         data.append("nombre", formData.firstName);
@@ -320,7 +340,6 @@ if (field === "phone") {
         data.append("telefono", formData.phone);
         data.append("ubicacion", formData.location);
         data.append("fecha_nacimiento", formData.birthDate);
-        //data.append("edad", formData.age);
         data.append("presentacion", formData.presentation);
         data.append("experiencia", formData.experience);
         data.append("tarifa", formData.rate);
@@ -328,7 +347,6 @@ if (field === "phone") {
         data.append("habilidades", formData.skills.join(","));
         data.append("certificaciones", formData.certificates.join(","));
 
-        // ✅ FOTO DE PERFIL (selfie)
         if (formData.facePhoto) {
           data.append("foto_url", {
             uri: formData.facePhoto.uri,
@@ -337,7 +355,6 @@ if (field === "phone") {
           } as any);
         }
 
-        // ✅ DNI FRONTAL
         if (formData.idPhoto) {
           data.append("DNI_frontal_url", {
             uri: formData.idPhoto.uri,
@@ -346,82 +363,78 @@ if (field === "phone") {
           } as any);
         }
 
-        // ✅ DNI REVERSO (no se usa aún)
         if (formData.idPhotoBack) {
           data.append("DNI_reverso_url", {
-            uri: formData.idPhoto.uri,
+            uri: formData.idPhotoBack.uri,
             type: "image/jpeg",
             name: "dni_reverso.jpg",
           } as any);
         }
 
-        // ✅ ANTECEDENTES
         if (formData.criminalRecordPhoto) {
           data.append("Antecedentes_penales_url", {
             uri: formData.criminalRecordPhoto.uri,
-            type: formData.criminalRecordPhoto.mimeType || "application/pdf",
-            name: formData.criminalRecordPhoto.name || "antecedentes.pdf",
+            type:
+              formData.criminalRecordPhoto.mimeType || "application/pdf",
+            name:
+              formData.criminalRecordPhoto.name || "antecedentes.pdf",
           } as any);
         }
 
-        console.log("Enviando datos a:", ENDPOINTS.register);
-        const response = await fetch(ENDPOINTS.register, {
+        const url = ENDPOINTS.register_ninera;
+        console.log("Enviando datos a:", url);
+
+        const response = await fetch(url, {
           method: "POST",
           body: data,
           headers: {
-            'Accept': 'application/json',
-            
+            Accept: "application/json",
           },
         });
 
-        const result = await response.json();
+        const result = await response.json().catch(() => ({}));
         console.log("Respuesta del servidor:", result);
 
         if (!response.ok) {
           throw new Error(result.message || "Error al registrar niñera");
         }
-       if (response.ok) {
-  const result = await response.json().catch(() => ({}));
-  console.log("Registro exitoso, procesando redirección...");
 
-  if (Platform.OS === 'web') {
-    // --- SOLUCIÓN PARA NAVEGADOR (WEB) ---
-    // El alert nativo de JS es infalible en la web y detiene el flujo
-    window.alert("¡Registro Recibido!\nTu perfil de Nani ha sido creado y está en revisión. Te avisaremos pronto.");
-    
-    // Redirección forzada
-    console.log("Redirigiendo a login en Web...");
-    router.replace("/login"); 
-    
-    // Respaldo por si router.replace falla en la laptop
-    setTimeout(() => {
-      if (window.location.pathname !== '/login') {
-        window.location.href = "/login";
-      }
-    }, 500);
+        console.log("Registro exitoso, procesando redirección...");
 
-  } else {
-    // --- SOLUCIÓN PARA MÓVIL (IOS/ANDROID) ---
-    Alert.alert(
-      "¡Registro Recibido!", 
-      "Tu perfil de Nani ha sido creado y está en revisión. Te avisaremos pronto.",
-      [
-        { 
-          text: "Entendido", 
-          onPress: () => {
-            console.log("Redirigiendo a login en Móvil...");
-            router.replace("/login");
-          } 
+        if (Platform.OS === "web") {
+          window.alert(
+            "¡Registro Recibido!\nTu perfil de Nani ha sido creado y está en revisión. Te avisaremos pronto."
+          );
+
+          router.replace("/login");
+
+          setTimeout(() => {
+            if (window.location.pathname !== "/login") {
+              window.location.href = "/login";
+            }
+          }, 500);
+        } else {
+          Alert.alert(
+            "¡Registro Recibido!",
+            "Tu perfil de Nani ha sido creado y está en revisión. Te avisaremos pronto.",
+            [
+              {
+                text: "Entendido",
+                onPress: () => {
+                  console.log("Redirigiendo a login en Móvil...");
+                  router.replace("/login");
+                },
+              },
+            ],
+            { cancelable: false }
+          );
         }
-      ],
-      { cancelable: false }
-    );
-  }
-}
-
       } catch (error: any) {
-      console.error("Error en el registro:", error);
-        Alert.alert("Error de Registro", error.message || "No se pudo conectar con el servidor");
+        console.error("Error en el registro:", error);
+        Alert.alert(
+          "Error de Registro",
+          error.message || "No se pudo conectar con el servidor"
+        );
       } finally {
         setLoading(false);
       }
@@ -471,8 +484,17 @@ if (field === "phone") {
               <Text style={styles.cardTitle}>Información Personal</Text>
 
               <Text style={styles.label}>Nombres</Text>
-              <View style={[styles.inputContainer, errors.firstName && styles.inputError]}>
-                <Ionicons name="person-outline" size={18} color={errors.firstName ? "#EF4444" : "#9CA3AF"} />
+              <View
+                style={[
+                  styles.inputContainer,
+                  errors.firstName && styles.inputError,
+                ]}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={18}
+                  color={errors.firstName ? "#EF4444" : "#9CA3AF"}
+                />
                 <TextInput
                   placeholder="Ej: Ana María"
                   style={styles.input}
@@ -480,11 +502,22 @@ if (field === "phone") {
                   onBlur={() => validateField("firstName", formData.firstName)}
                 />
               </View>
-              {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
+              {errors.firstName && (
+                <Text style={styles.errorText}>{errors.firstName}</Text>
+              )}
 
               <Text style={styles.label}>Apellidos</Text>
-              <View style={[styles.inputContainer, errors.lastName && styles.inputError]}>
-                <Ionicons name="person-outline" size={18} color={errors.lastName ? "#EF4444" : "#9CA3AF"} />
+              <View
+                style={[
+                  styles.inputContainer,
+                  errors.lastName && styles.inputError,
+                ]}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={18}
+                  color={errors.lastName ? "#EF4444" : "#9CA3AF"}
+                />
                 <TextInput
                   placeholder="Ej: Pérez López"
                   style={styles.input}
@@ -492,70 +525,89 @@ if (field === "phone") {
                   onBlur={() => validateField("lastName", formData.lastName)}
                 />
               </View>
-              {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
+              {errors.lastName && (
+                <Text style={styles.errorText}>{errors.lastName}</Text>
+              )}
 
               <Text style={styles.label}>Fecha de nacimiento</Text>
-{Platform.OS === 'web' ? (
-  /* --- VISTA PARA LAPTOP (WEB) --- */
-  <View style={[styles.inputContainer, errors.birthDate && styles.inputError]}>
-    <Ionicons name="calendar-outline" size={18} color="#9CA3AF" />
-    <TextInput
-    placeholder="AAAA-MM-DD (Ej: 2000-05-15)"
-  style={styles.input}
-  value={formData.birthDate}
-  onChangeText={(v) => handleInputChange("birthDate", v)}
-  onBlur={() => {
-    // Validamos que tenga el formato correcto antes de procesar
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (dateRegex.test(formData.birthDate)) {
-      // Usamos un split para evitar líos de zonas horarias del navegador
-      const [year, month, day] = formData.birthDate.split('-').map(Number);
-      const selectedDate = new Date(year, month - 1, day);
+              {Platform.OS === "web" ? (
+                <View
+                  style={[
+                    styles.inputContainer,
+                    errors.birthDate && styles.inputError,
+                  ]}
+                >
+                  <Ionicons
+                    name="calendar-outline"
+                    size={18}
+                    color="#9CA3AF"
+                  />
+                  <TextInput
+                    placeholder="AAAA-MM-DD (Ej: 2000-05-15)"
+                    style={styles.input}
+                    value={formData.birthDate}
+                    onChangeText={(v) => handleInputChange("birthDate", v)}
+                    onBlur={() => {
+                      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                      if (dateRegex.test(formData.birthDate)) {
+                        const [year, month, day] = formData.birthDate
+                          .split("-")
+                          .map(Number);
+                        const selectedDate = new Date(year, month - 1, day);
 
-      if (!isNaN(selectedDate.getTime())) {
-        const age = calculateAge(selectedDate);
-        setFormData(prev => ({
-          ...prev, 
-          birthDate: formData.birthDate, // Mandamos el string limpio
-          age: age.toString() 
-        }));
-      }
-    } else if (formData.birthDate.length > 0) {
-      Alert.alert("Formato incorrecto", "Usa el formato AAAA-MM-DD");
-    }
-    validateField("birthDate", formData.birthDate);
-  }}
-    />
-  </View>
-) : (
-  /* --- VISTA PARA CELULAR (MÓVIL) --- */
-  <TouchableOpacity
-    style={[styles.inputContainer, errors.birthDate && styles.inputError]}
-    onPress={() => setShowDatePicker(true)}
-  >
-    <Ionicons name="calendar-outline" size={18} color="#9CA3AF" />
-    <TextInput
-      placeholder="Seleccionar fecha"
-      style={styles.input}
-      value={formData.birthDate}
-      editable={false}
-    />
-  </TouchableOpacity>
-)}
+                        if (!isNaN(selectedDate.getTime())) {
+                          const age = calculateAge(selectedDate);
+                          setFormData((prev) => ({
+                            ...prev,
+                            birthDate: formData.birthDate,
+                            age: age.toString(),
+                          }));
+                        }
+                      } else if (formData.birthDate.length > 0) {
+                        Alert.alert(
+                          "Formato incorrecto",
+                          "Usa el formato AAAA-MM-DD"
+                        );
+                      }
 
-{/* El Modal de abajo solo se activa en celulares */}
-{Platform.OS !== 'web' && (
-  <DateTimePickerModal
-    isVisible={showDatePicker}
-    mode="date"
-    onConfirm={handleDateChange}
-    onCancel={() => setShowDatePicker(false)}
-    maximumDate={new Date()}
-    locale="es_ES"
-    confirmTextIOS="Confirmar"
-    cancelTextIOS="Cancelar"
-  />
-)}
+                      validateField("birthDate", formData.birthDate);
+                    }}
+                  />
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.inputContainer,
+                    errors.birthDate && styles.inputError,
+                  ]}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Ionicons
+                    name="calendar-outline"
+                    size={18}
+                    color="#9CA3AF"
+                  />
+                  <TextInput
+                    placeholder="Seleccionar fecha"
+                    style={styles.input}
+                    value={formData.birthDate}
+                    editable={false}
+                  />
+                </TouchableOpacity>
+              )}
+
+              {Platform.OS !== "web" && (
+                <DateTimePickerModal
+                  isVisible={showDatePicker}
+                  mode="date"
+                  onConfirm={handleDateChange}
+                  onCancel={() => setShowDatePicker(false)}
+                  maximumDate={new Date()}
+                  locale="es_ES"
+                  confirmTextIOS="Confirmar"
+                  cancelTextIOS="Cancelar"
+                />
+              )}
 
               <Text style={styles.label}>Edad</Text>
               <View style={styles.inputContainer}>
@@ -567,8 +619,17 @@ if (field === "phone") {
               </View>
 
               <Text style={styles.label}>Correo electrónico</Text>
-              <View style={[styles.inputContainer, errors.email && styles.inputError]}>
-                <Ionicons name="mail-outline" size={18} color={errors.email ? "#EF4444" : "#9CA3AF"} />
+              <View
+                style={[
+                  styles.inputContainer,
+                  errors.email && styles.inputError,
+                ]}
+              >
+                <Ionicons
+                  name="mail-outline"
+                  size={18}
+                  color={errors.email ? "#EF4444" : "#9CA3AF"}
+                />
                 <TextInput
                   placeholder="tu@gmail.com o @icloud.com"
                   style={styles.input}
@@ -578,24 +639,47 @@ if (field === "phone") {
                   onBlur={() => validateField("email", formData.email)}
                 />
               </View>
-              {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
-<Text style={styles.label}>Teléfono</Text>
-              <View style={[styles.inputContainer, errors.phone && styles.inputError]}>
-                <Ionicons name="call-outline" size={18} color={errors.phone ? "#EF4444" : "#9CA3AF"} />
+              {errors.email && (
+                <Text style={styles.errorText}>{errors.email}</Text>
+              )}
+
+              <Text style={styles.label}>Teléfono</Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  errors.phone && styles.inputError,
+                ]}
+              >
+                <Ionicons
+                  name="call-outline"
+                  size={18}
+                  color={errors.phone ? "#EF4444" : "#9CA3AF"}
+                />
                 <TextInput
                   placeholder="+504 9988-7766"
                   style={styles.input}
                   keyboardType="phone-pad"
-                  maxLength={13} // Para que no escriban de más
+                  maxLength={13}
                   onChangeText={(v) => handleInputChange("phone", v)}
                   onBlur={() => validateField("phone", formData.phone)}
                 />
               </View>
-              {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
-              
+              {errors.phone && (
+                <Text style={styles.errorText}>{errors.phone}</Text>
+              )}
+
               <Text style={styles.label}>Ubicación</Text>
-              <View style={[styles.inputContainer, errors.location && styles.inputError]}>
-                <Ionicons name="location-outline" size={18} color={errors.location ? "#EF4444" : "#9CA3AF"} />
+              <View
+                style={[
+                  styles.inputContainer,
+                  errors.location && styles.inputError,
+                ]}
+              >
+                <Ionicons
+                  name="location-outline"
+                  size={18}
+                  color={errors.location ? "#EF4444" : "#9CA3AF"}
+                />
                 <TextInput
                   placeholder="Ciudad, País"
                   style={styles.input}
@@ -603,11 +687,22 @@ if (field === "phone") {
                   onBlur={() => validateField("location", formData.location)}
                 />
               </View>
-              {errors.location && <Text style={styles.errorText}>{errors.location}</Text>}
+              {errors.location && (
+                <Text style={styles.errorText}>{errors.location}</Text>
+              )}
 
               <Text style={styles.label}>Contraseña</Text>
-              <View style={[styles.inputContainer, errors.password && styles.inputError]}>
-                <Ionicons name="lock-closed-outline" size={18} color={errors.password ? "#EF4444" : "#9CA3AF"} />
+              <View
+                style={[
+                  styles.inputContainer,
+                  errors.password && styles.inputError,
+                ]}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={18}
+                  color={errors.password ? "#EF4444" : "#9CA3AF"}
+                />
                 <TextInput
                   placeholder="Mínimo 8 caracteres"
                   secureTextEntry
@@ -616,20 +711,37 @@ if (field === "phone") {
                   onBlur={() => validateField("password", formData.password)}
                 />
               </View>
-              {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+              {errors.password && (
+                <Text style={styles.errorText}>{errors.password}</Text>
+              )}
 
               <Text style={styles.label}>Confirmar contraseña</Text>
-              <View style={[styles.inputContainer, errors.confirmPassword && styles.inputError]}>
-                <Ionicons name="lock-closed-outline" size={18} color={errors.confirmPassword ? "#EF4444" : "#9CA3AF"} />
+              <View
+                style={[
+                  styles.inputContainer,
+                  errors.confirmPassword && styles.inputError,
+                ]}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={18}
+                  color={errors.confirmPassword ? "#EF4444" : "#9CA3AF"}
+                />
                 <TextInput
                   placeholder="Repite tu contraseña"
                   secureTextEntry
                   style={styles.input}
-                  onChangeText={(v) => handleInputChange("confirmPassword", v)}
-                  onBlur={() => validateField("confirmPassword", formData.confirmPassword)}
+                  onChangeText={(v) =>
+                    handleInputChange("confirmPassword", v)
+                  }
+                  onBlur={() =>
+                    validateField("confirmPassword", formData.confirmPassword)
+                  }
                 />
               </View>
-              {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
+              {errors.confirmPassword && (
+                <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+              )}
             </View>
 
             <View style={styles.card}>
@@ -657,7 +769,12 @@ if (field === "phone") {
                 {formData.idPhoto && (
                   <Image
                     source={{ uri: formData.idPhoto.uri }}
-                    style={{ width: 80, height: 80, marginTop: 10, borderRadius: 10 }}
+                    style={{
+                      width: 80,
+                      height: 80,
+                      marginTop: 10,
+                      borderRadius: 10,
+                    }}
                   />
                 )}
               </TouchableOpacity>
@@ -668,12 +785,19 @@ if (field === "phone") {
               >
                 <Ionicons name="image-outline" size={26} color="#999" />
                 <Text style={styles.uploadText}>
-                  {formData.idPhotoBack ? "Documento cargado" : "Foto de identidad Reverso"}
+                  {formData.idPhotoBack
+                    ? "Documento cargado"
+                    : "Foto de identidad Reverso"}
                 </Text>
                 {formData.idPhotoBack && (
                   <Image
                     source={{ uri: formData.idPhotoBack.uri }}
-                    style={{ width: 80, height: 80, marginTop: 10, borderRadius: 10 }}
+                    style={{
+                      width: 80,
+                      height: 80,
+                      marginTop: 10,
+                      borderRadius: 10,
+                    }}
                   />
                 )}
               </TouchableOpacity>
@@ -686,7 +810,12 @@ if (field === "phone") {
                 {formData.facePhoto && (
                   <Image
                     source={{ uri: formData.facePhoto.uri }}
-                    style={{ width: 80, height: 80, marginTop: 10, borderRadius: 10 }}
+                    style={{
+                      width: 80,
+                      height: 80,
+                      marginTop: 10,
+                      borderRadius: 10,
+                    }}
                   />
                 )}
               </TouchableOpacity>
@@ -718,14 +847,16 @@ if (field === "phone") {
                     key={index}
                     style={[
                       styles.experienceOption,
-                      formData.experience === year && styles.experienceOptionActive,
+                      formData.experience === year &&
+                        styles.experienceOptionActive,
                     ]}
                     onPress={() => handleInputChange("experience", year)}
                   >
                     <Text
                       style={[
                         styles.experienceOptionText,
-                        formData.experience === year && styles.experienceOptionTextActive,
+                        formData.experience === year &&
+                          styles.experienceOptionTextActive,
                       ]}
                     >
                       {year}
@@ -750,16 +881,27 @@ if (field === "phone") {
               </View>
 
               {formData.skills.map((skill, i) => (
-                <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View
+                  key={i}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
                   <Text style={styles.tag}>{skill}</Text>
                   <TouchableOpacity
                     onPress={() => {
-                      const updated = [...formData.skills]
-                      updated.splice(i, 1)
-                      setFormData({ ...formData, skills: updated })
+                      const updated = [...formData.skills];
+                      updated.splice(i, 1);
+                      setFormData({ ...formData, skills: updated });
                     }}
                   >
-                    <Ionicons name="close-circle" size={20} color="#FF768A" />
+                    <Ionicons
+                      name="close-circle"
+                      size={20}
+                      color="#FF768A"
+                    />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -787,16 +929,27 @@ if (field === "phone") {
               </View>
 
               {formData.certificates.map((c, i) => (
-                <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View
+                  key={i}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
                   <Text style={styles.tag}>{c}</Text>
                   <TouchableOpacity
                     onPress={() => {
-                      const updated = [...formData.certificates]
-                      updated.splice(i, 1)
-                      setFormData({ ...formData, certificates: updated })
+                      const updated = [...formData.certificates];
+                      updated.splice(i, 1);
+                      setFormData({ ...formData, certificates: updated });
                     }}
                   >
-                    <Ionicons name="close-circle" size={20} color="#FF768A" />
+                    <Ionicons
+                      name="close-circle"
+                      size={20}
+                      color="#FF768A"
+                    />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -824,17 +977,17 @@ if (field === "phone") {
           </>
         )}
 
-        <TouchableOpacity 
-          style={[styles.mainBtn, loading && { opacity: 0.7 }]} 
+        <TouchableOpacity
+          style={[styles.mainBtn, loading && { opacity: 0.7 }]}
           onPress={handleNext}
           disabled={loading}
         >
           {loading && step === 3 ? (
-             <ActivityIndicator color="white" />
+            <ActivityIndicator color="white" />
           ) : (
-             <Text style={styles.mainBtnText}>
-               {step === totalSteps ? "Completar registro" : "Continuar"}
-             </Text>
+            <Text style={styles.mainBtnText}>
+              {step === totalSteps ? "Completar registro" : "Continuar"}
+            </Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -896,9 +1049,19 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
-  cardTitle: { fontWeight: "bold", marginBottom: 15, fontSize: 15, color: "#2E2E2E" },
+  cardTitle: {
+    fontWeight: "bold",
+    marginBottom: 15,
+    fontSize: 15,
+    color: "#2E2E2E",
+  },
 
-  label: { fontSize: 13, color: "#6B7280", marginTop: 10, marginBottom: 6 },
+  label: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: 10,
+    marginBottom: 6,
+  },
 
   row: { flexDirection: "row", gap: 10, alignItems: "center" },
 
@@ -948,7 +1111,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFE4EA",
     padding: 8,
     borderRadius: 10,
-    overflow: "hidden", // Para que no se salga el color de fondo en iOS
+    overflow: "hidden",
   },
 
   mainBtn: {
@@ -961,13 +1124,13 @@ const styles = StyleSheet.create({
 
   mainBtnText: { color: "white", fontWeight: "bold", fontSize: 16 },
 
-  // NUEVOS ESTILOS PARA ERRORES
   errorText: {
-    color: "#EF4444", 
+    color: "#EF4444",
     fontSize: 12,
     marginTop: 4,
     marginLeft: 4,
   },
+
   inputError: {
     borderColor: "#EF4444",
     borderWidth: 1,

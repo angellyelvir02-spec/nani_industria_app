@@ -237,11 +237,32 @@ export default function BookingsListScreen() {
 
                 {booking.status === "confirmed" && (
                   <View style={styles.qrButtonsRow}>
-                    <TouchableOpacity style={styles.qrEntryButton}>
+                    <TouchableOpacity
+                      style={styles.qrEntryButton}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/register/client/ClientJobTracking",
+                          params: { bookingId: booking.id },
+                        })
+                      }
+                    >
                       <QrCode size={16} color="#16A34A" />
                       <Text style={styles.qrEntryButtonText}>Entrada</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.qrExitButton}>
+                  </View>
+                )}
+                
+                {booking.status === "en_progreso" && (
+                  <View style={styles.qrButtonsRow}>
+                    <TouchableOpacity
+                      style={styles.qrExitButton}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/register/client/ClientJobTracking",
+                          params: { bookingId: booking.id },
+                        })
+                      }
+                    >
                       <QrCode size={16} color="#EA580C" />
                       <Text style={styles.qrExitButtonText}>Salida</Text>
                     </TouchableOpacity>

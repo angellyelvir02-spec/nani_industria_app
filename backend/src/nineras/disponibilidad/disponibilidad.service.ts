@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { SupabaseService } from '../../supabase/supabase.service';
 
 @Injectable()
@@ -15,43 +19,113 @@ export class DisponibilidadService {
   }) {
     const admin = this.supabaseService.getAdminClient();
 
-    if (!body.usuario_id) {
+    if (!body?.usuario_id) {
       throw new BadRequestException('usuario_id es requerido');
     }
 
-    if (!body.disponibilidad || body.disponibilidad.length === 0) {
+    if (!Array.isArray(body.disponibilidad) || body.disponibilidad.length === 0) {
       throw new BadRequestException('No se recibió disponibilidad');
     }
 
-    const { data: ninera, error: nineraError } = await admin
-      .from('ninera')
-      .select('id')
-      .eq('usuario_id', body.usuario_id)
-      .single();
+    const diasValidos = [
+      'Lunes',
+      'Martes',
+      'Miércoles',
+      'Jueves',
+      'Viernes',
+      'Sábado',
+      'Domingo',
+    ];
 
-    if (nineraError || !ninera) {
-      throw new BadRequestException('No se encontró la niñera');
+    const horaRegex = /^([01]\d|2[0-3]):00$/;
+
+    for (const item of body.disponibilidad) {
+      if (!item.dia_semana || !diasValidos.includes(item.dia_semana)) {
+        throw new BadRequestException(
+          `Día inválido: ${item.dia_semana}`,
+        );
+      }
+
+      if (!item.hora_inicio || !horaRegex.test(item.hora_inicio)) {
+        throw new BadRequestException(
+          `Hora de inicio inválida para ${item.dia_semana}`,
+        );
+      }
+
+      if (!item.hora_fin || !horaRegex.test(item.hora_fin)) {
+        throw new BadRequestException(
+          `Hora de fin inválida para ${item.dia_semana}`,
+        );
+      }
+
+      const inicio = parseInt(item.hora_inicio.split(':')[0], 10);
+      const fin = parseInt(item.hora_fin.split(':')[0], 10);
+
+      if (inicio >= fin) {
+        throw new BadRequestException(
+          `La hora_inicio debe ser menor que hora_fin en ${item.dia_semana}`,
+        );
+      }
     }
 
-    const insertData = body.disponibilidad.map((item) => ({
-      ninera_id: ninera.id,
-      dia_semana: item.dia_semana,
-      hora_inicio: item.hora_inicio,
-      hora_fin: item.hora_fin,
-    }));
+    try {
+      const { data: ninera, error: nineraError } = await admin
+        .from('ninera')
+        .select('id')
+        .eq('usuario_id', body.usuario_id)
+        .maybeSingle();
 
-    const { error } = await admin
-      .from('disponibilidad_ninera')
-      .insert(insertData);
+      if (nineraError) {
+        console.error(
+          'Error buscando niñera en saveDisponibilidad:',
+          nineraError,
+        );
+        throw new InternalServerErrorException(
+          `Error de base de datos: ${nineraError.message}`,
+        );
+      }
 
-    if (error) {
-      throw new BadRequestException(
-        `Error guardando disponibilidad: ${error.message}`,
+      if (!ninera) {
+        throw new BadRequestException('No se encontró la niñera');
+      }
+
+      const insertData = body.disponibilidad.map((item) => ({
+        ninera_id: ninera.id,
+        dia_semana: item.dia_semana,
+        hora_inicio: item.hora_inicio,
+        hora_fin: item.hora_fin,
+      }));
+
+      const { error } = await admin
+        .from('disponibilidad_ninera')
+        .insert(insertData);
+
+      if (error) {
+        console.error(
+          'Error guardando disponibilidad en saveDisponibilidad:',
+          error,
+        );
+        throw new InternalServerErrorException(
+          `Error guardando disponibilidad: ${error.message}`,
+        );
+      }
+
+      return {
+        message: 'Disponibilidad guardada correctamente',
+      };
+    } catch (err) {
+      console.error('Error crítico en saveDisponibilidad:', err);
+
+      if (
+        err instanceof BadRequestException ||
+        err instanceof InternalServerErrorException
+      ) {
+        throw err;
+      }
+
+      throw new InternalServerErrorException(
+        'Error interno al guardar disponibilidad',
       );
     }
-
-    return {
-      message: 'Disponibilidad guardada correctamente',
-    };
   }
 }

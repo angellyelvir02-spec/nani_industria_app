@@ -2,8 +2,9 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
-import { SupabaseService } from '../supabase/supabase.service'; // Ajusta la ruta a tu servicio de Supabase
+import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
 export class ClientesService {
@@ -12,29 +13,57 @@ export class ClientesService {
   async getMisNinos(userId: string) {
     const admin = this.supabaseService.getAdminClient();
 
-    // 1. Obtenemos el id de la tabla 'cliente' vinculado al UUID de auth
-    const { data: cliente, error: clientError } = await admin
-      .from('cliente')
-      .select('id')
-      .eq('usuario_id', userId)
-      .single();
-
-    if (clientError || !cliente) {
-      throw new NotFoundException('Perfil de cliente no encontrado');
+    if (!userId) {
+      throw new BadRequestException('userId es requerido');
     }
 
-    // 2. Consultamos los niños vinculados a ese cliente
-    const { data: ninos, error: ninosError } = await admin
-      .from('nino')
-      .select('id, nombre, edad, nota')
-      .eq('cliente_id', cliente.id);
+    try {
+      // Obtiene el id de la tabla cliente vinculado al usuario autenticado
+      const { data: cliente, error: clientError } = await admin
+        .from('cliente')
+        .select('id')
+        .eq('usuario_id', userId)
+        .maybeSingle();
 
-    if (ninosError) {
-      throw new BadRequestException(
-        `Error al obtener niños: ${ninosError.message}`,
+      if (clientError) {
+        console.error('Error obteniendo cliente en getMisNinos:', clientError);
+        throw new InternalServerErrorException(
+          `Error de base de datos: ${clientError.message}`,
+        );
+      }
+
+      if (!cliente) {
+        throw new NotFoundException('Perfil de cliente no encontrado');
+      }
+
+      // Consulta los niños vinculados al cliente
+      const { data: ninos, error: ninosError } = await admin
+        .from('nino')
+        .select('id, nombre, edad, nota')
+        .eq('cliente_id', cliente.id);
+
+      if (ninosError) {
+        console.error('Error obteniendo niños en getMisNinos:', ninosError);
+        throw new InternalServerErrorException(
+          `Error al obtener niños: ${ninosError.message}`,
+        );
+      }
+
+      return ninos ?? [];
+    } catch (err) {
+      console.error('Error crítico en getMisNinos:', err);
+
+      if (
+        err instanceof BadRequestException ||
+        err instanceof NotFoundException ||
+        err instanceof InternalServerErrorException
+      ) {
+        throw err;
+      }
+
+      throw new InternalServerErrorException(
+        'Error interno al obtener los niños del cliente',
       );
     }
-
-    return ninos;
   }
 }

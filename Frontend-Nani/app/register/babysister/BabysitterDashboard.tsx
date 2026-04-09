@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -87,6 +86,44 @@ export default function BabysitterDashboard() {
     "20:00",
   ];
 
+  const normalizeBookingStatus = (status: string) => {
+    const normalized = (status || "").toLowerCase().trim();
+
+    if (normalized === "confirmado") return "confirmada";
+    if (normalized === "confirmada") return "confirmada";
+
+    if (normalized === "finalizado") return "completada";
+    if (normalized === "completado") return "completada";
+    if (normalized === "completada") return "completada";
+
+    if (normalized === "cancelado") return "cancelada";
+    if (normalized === "cancelada") return "cancelada";
+
+    if (normalized === "en_progreso") return "en_progreso";
+    if (normalized === "pendiente") return "pendiente";
+
+    return normalized || "pendiente";
+  };
+
+  const getActionLabel = (status: string) => {
+    const normalizedStatus = normalizeBookingStatus(status);
+    
+    if (normalizedStatus === "pendiente") return "Aceptar";
+    if (normalizedStatus === "confirmada") return "Confirmar llegada";
+    if (normalizedStatus === "en_progreso") return "Confirmar salida";
+    
+    return "Seguimiento";
+  };
+
+  const getScanMode = (status: string) => {
+    const normalizedStatus = normalizeBookingStatus(status);
+
+    if (normalizedStatus === "confirmada") return "checkin";
+    if (normalizedStatus === "en_progreso") return "checkout";
+
+    return "view";
+  };
+
   const handleShowDetails = (booking: any) => {
     setSelectedBooking(booking);
     setIsDetailsOpen(true);
@@ -147,6 +184,8 @@ export default function BabysitterDashboard() {
         const fecha = item.fecha_servicio || "";
         const horaInicio = item.hora_inicio || "";
         const horaFin = item.hora_fin || "";
+        const normalizedStatus = normalizeBookingStatus(item.estado || "pendiente");
+
         const direccionObj =
           item.direccion ||
           item.direccion_servicio ||
@@ -159,7 +198,6 @@ export default function BabysitterDashboard() {
           direccionObj?.direccion ||
           direccionObj?.ubicacion ||
           direccionObj?.punto_referencia ||
-          //item.cliente?.persona?.ubicacion ||
           item.ubicacion ||
           "Dirección no disponible";
 
@@ -179,6 +217,7 @@ export default function BabysitterDashboard() {
 
         return {
           id: item.id,
+          codigo_reserva: item.codigo_reserva || "",
           clientName: clientePersona
             ? `${clientePersona.nombre} ${clientePersona.apellido}`
             : "Cliente",
@@ -186,10 +225,12 @@ export default function BabysitterDashboard() {
             clientePersona?.foto_url || "https://via.placeholder.com/150",
           date: fecha,
           time: `${horaInicio} - ${horaFin}`,
+          scheduledStart: horaInicio,
+          scheduledEnd: horaFin,
           duration: item.duracion_horas || 0,
           children: item.reserva_nino?.length || 0,
           payment: item.monto_total || 0,
-          status: item.estado || "pendiente",
+          status: normalizedStatus,
           address,
           paymentMethod: item.metodo_pago?.nombre || "No especificado",
           childrenDetails: "Pendiente",
@@ -200,8 +241,8 @@ export default function BabysitterDashboard() {
       });
 
       const activeBookings = mappedBookings.filter((booking: any) =>
-        ["pendiente", "confirmado", "en_progreso"].includes(
-          (booking.status || "").toLowerCase()
+        ["pendiente", "confirmada", "en_progreso"].includes(
+          normalizeBookingStatus(booking.status)
         )
       );
 
@@ -239,7 +280,6 @@ export default function BabysitterDashboard() {
 
       setUpdatingBooking(true);
 
-      // AQUÍ debes usar tu endpoint real de backend
       const response = await fetch(
         ENDPOINTS.update_estado_reserva(bookingToAccept.id),
         {
@@ -262,7 +302,7 @@ export default function BabysitterDashboard() {
       setPendingBookings((prev) =>
         prev.map((booking) =>
           booking.id === bookingToAccept.id
-            ? { ...booking, status: "confirmado" }
+            ? { ...booking, status: "confirmada" }
             : booking
         )
       );
@@ -276,6 +316,36 @@ export default function BabysitterDashboard() {
     } finally {
       setUpdatingBooking(false);
     }
+  };
+
+  const openTrackingForBooking = (booking: any) => {
+    const normalizedStatus = normalizeBookingStatus(booking.status);
+    const scanMode = getScanMode(normalizedStatus);
+
+    router.push({
+      pathname: "./JobTracking",
+      params: {
+        bookingId: booking.id,
+        bookingCode: booking.codigo_reserva || "",
+        clientName: booking.clientName,
+        clientPhoto: booking.clientPhoto,
+        date: booking.date,
+        time: booking.time,
+        scheduledStart: booking.scheduledStart,
+        scheduledEnd: booking.scheduledEnd,
+        duration: booking.duration,
+        children: booking.children,
+        address: booking.address,
+        payment: booking.payment,
+        paymentMethod: booking.paymentMethod,
+        childrenDetails: booking.childrenDetails,
+        notes: booking.notes,
+        latitude: booking.latitude ?? "",
+        longitude: booking.longitude ?? "",
+        bookingStatus: normalizedStatus,
+        scanMode,
+      },
+    });
   };
 
   const addAvailabilityItem = () => {
@@ -471,38 +541,35 @@ export default function BabysitterDashboard() {
 
                   <Text style={styles.address}>{booking.address}</Text>
 
+                  <View style={styles.statusRow}>
+                    <Text style={styles.statusLabel}>Estado:</Text>
+                    <Text style={styles.statusValue}>{booking.status}</Text>
+                  </View>
+
                   <View style={styles.buttonRow}>
                     <TouchableOpacity
                       style={styles.acceptBtn}
                       onPress={() => {
-                        if (booking.status === "pendiente") {
+                        const normalizedStatus = normalizeBookingStatus(
+                          booking.status
+                        );
+
+                        if (normalizedStatus === "pendiente") {
                           handleOpenAcceptModal(booking);
-                        } else {
-                          router.push({
-                            pathname: "./JobTracking",
-                            params: {
-                              bookingId: booking.id,
-                              clientName: booking.clientName,
-                              clientPhoto: booking.clientPhoto,
-                              date: booking.date,
-                              time: booking.time,
-                              duration: booking.duration,
-                              children: booking.children,
-                              address: booking.address,
-                              payment: booking.payment,
-                              paymentMethod: booking.paymentMethod,
-                              childrenDetails: booking.childrenDetails,
-                              notes: booking.notes,
-                              latitude: booking.latitude ?? "",
-                              longitude: booking.longitude ?? "",
-                            },
-                          });
+                          return;
+                        }
+
+                        if (
+                          normalizedStatus === "confirmada" ||
+                          normalizedStatus === "en_progreso"
+                        ) {
+                          openTrackingForBooking(booking);
                         }
                       }}
                     >
                       <QrCode size={14} color="white" />
                       <Text style={styles.acceptText}>
-                        {booking.status === "pendiente" ? "Aceptar" : "Seguimiento"}
+                        {getActionLabel(booking.status)}
                       </Text>
                     </TouchableOpacity>
 
@@ -534,6 +601,7 @@ export default function BabysitterDashboard() {
             <Clock color="#886BC1" />
             <Text style={styles.quickTitle}>Disponibilidad</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.quickCard}
             onPress={() => router.push("./BabysitterOwnProfile")}
@@ -629,6 +697,10 @@ export default function BabysitterDashboard() {
                 </Text>
 
                 <Text style={styles.modalText}>
+                  Estado: {selectedBooking.status}
+                </Text>
+
+                <Text style={styles.modalText}>
                   Dirección: {selectedBooking.address}
                 </Text>
 
@@ -668,23 +740,23 @@ export default function BabysitterDashboard() {
             >
               <X />
             </TouchableOpacity>
-            
+
             <Text style={styles.modalTitle}>Aceptar reserva</Text>
-            
+
             {bookingToAccept && (
               <View>
                 <Text style={styles.modalText}>
                   ¿Deseas aceptar la reserva de {bookingToAccept.clientName}?
                 </Text>
-            
+
                 <Text style={styles.modalText}>
                   Fecha: {bookingToAccept.date}
                 </Text>
-            
+
                 <Text style={styles.modalText}>
                   Hora: {bookingToAccept.time}
                 </Text>
-            
+
                 <Text style={styles.modalText}>
                   Dirección: {bookingToAccept.address}
                 </Text>
@@ -702,7 +774,7 @@ export default function BabysitterDashboard() {
               >
                 <Text style={styles.cancelBtnText}>No</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[
                   styles.okBtn,
@@ -721,7 +793,7 @@ export default function BabysitterDashboard() {
         </View>
       </Modal>
 
-      <Modal visible={isAvailabilityOpen} transparent animationType="fade">   
+      <Modal visible={isAvailabilityOpen} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modal}>
             <TouchableOpacity
@@ -759,7 +831,7 @@ export default function BabysitterDashboard() {
                   </TouchableOpacity>
                 ))}
               </View>
-              
+
               <Text style={styles.inputLabel}>Hora inicio</Text>
               <View style={styles.optionsWrap}>
                 {HOURS.map((hour) => (
@@ -783,7 +855,7 @@ export default function BabysitterDashboard() {
                   </TouchableOpacity>
                 ))}
               </View>
-              
+
               <Text style={styles.inputLabel}>Hora fin</Text>
               <View style={styles.optionsWrap}>
                 {HOURS.map((hour) => (
@@ -807,14 +879,14 @@ export default function BabysitterDashboard() {
                   </TouchableOpacity>
                 ))}
               </View>
-              
+
               <TouchableOpacity
                 style={styles.addAvailabilityBtn}
                 onPress={addAvailabilityItem}
               >
                 <Text style={styles.addAvailabilityBtnText}>Agregar horario</Text>
               </TouchableOpacity>
-              
+
               <ScrollView style={{ maxHeight: 180, marginTop: 12 }}>
                 {availabilityList.map((item) => (
                   <View key={item.id} style={styles.availabilityItem}>
@@ -824,14 +896,14 @@ export default function BabysitterDashboard() {
                         {item.hora_inicio} - {item.hora_fin}
                       </Text>
                     </View>
-                
+
                     <TouchableOpacity onPress={() => removeAvailabilityItem(item.id)}>
                       <Text style={styles.removeText}>Quitar</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
               </ScrollView>
-              
+
               <TouchableOpacity
                 style={[
                   styles.okBtn,
@@ -943,6 +1015,24 @@ const styles = StyleSheet.create({
 
   address: { color: "#999", fontSize: 12 },
 
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+  },
+
+  statusLabel: {
+    color: "#666",
+    fontSize: 12,
+  },
+
+  statusValue: {
+    color: "#886BC1",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
   buttonRow: { flexDirection: "row", marginTop: 8, gap: 8 },
 
   acceptBtn: {
@@ -1025,14 +1115,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     color: "#555",
     fontSize: 13,
-  },
-
-  input: {
-    backgroundColor: "#F3F4F6",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
   },
 
   addAvailabilityBtn: {

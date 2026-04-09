@@ -1,14 +1,15 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
-  UseGuards,
+  Get,
+  Param,
+  Patch,
+  Post,
   Req,
+  UseGuards,
   BadRequestException,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ReservasService } from './reservas.service';
 import { CreateReservaDto } from './dto/create-reserva.dto';
@@ -19,64 +20,91 @@ import { SupabaseGuard } from '../auth/supabase.guard';
 export class ReservasController {
   constructor(private readonly reservasService: ReservasService) {}
 
-  // 1. PRIMERO: Métodos de pago (Ruta específica sin parámetros)
   @Get('metodos-pago')
   async obtenerMetodos() {
-    return await this.reservasService.getMetodosPago();
+    return this.reservasService.getMetodosPago();
   }
-
-  // muestra las reservas en la pantalla reservas del cliente
 
   @Get('mis-reservas/:usuarioId')
-  async getMisReservas(@Param('usuarioId') usuarioId: string) {
-    return await this.reservasService.findBookingsForClientApp(usuarioId);
+  async getMisReservas(
+    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
+  ) {
+    return this.reservasService.findBookingsForClientApp(usuarioId);
   }
 
-  // crear reserva
   @Post()
   @UseGuards(SupabaseGuard)
   async create(@Body() createReservaDto: CreateReservaDto, @Req() req: any) {
     const authUserId = req.user?.id || req.user?.sub;
-    if (!authUserId) throw new BadRequestException('Usuario no identificado');
+
+    if (!authUserId) {
+      throw new BadRequestException('Usuario no identificado');
+    }
+
     return this.reservasService.create(createReservaDto, authUserId);
   }
 
-  // muestra las detalles de cada reserva del cliente
   @Get('detalle/:id')
-  async getDetalle(@Param('id') id: string) {
-    return await this.reservasService.getBookingDetail(id);
+  async getDetalle(@Param('id', ParseUUIDPipe) id: string) {
+    return this.reservasService.getBookingDetail(id);
   }
 
-  @Patch(':id/checkout')
-  async checkout(@Param('id') id: string) {
-    // Esta función llama a la lógica de Supabase que corregimos
-    return await this.reservasService.procesarCheckout(id);
+  @Post(':id/checkin')
+  async checkin(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body()
+    body: {
+      qrCode?: string;
+      checkInTime?: string | number;
+    },
+  ) {
+    return this.reservasService.procesarCheckin(id, body);
   }
 
-  // 4. RUTAS CON PARÁMETROS ESPECÍFICOS
+  @Post(':id/checkout')
+  async checkout(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body()
+    body: {
+      rating?: number;
+      comments?: string;
+      checkInTime?: string | number;
+      checkOutTime?: string | number;
+      totalHours?: number;
+      totalPayment?: number;
+      qrCode?: string;
+    },
+  ) {
+    return this.reservasService.procesarCheckout(id, body);
+  }
+
   @Get('ninera/:usuarioId')
-  findByNinera(@Param('usuarioId') usuarioId: string) {
+  async findByNinera(
+    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
+  ) {
     return this.reservasService.findByNinera(usuarioId);
   }
 
-  // 5. RUTAS GENÉRICAS AL FINAL (Para evitar que atrapen otras peticiones)
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.reservasService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateReservaDto: UpdateReservaDto) {
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateReservaDto: UpdateReservaDto,
+  ) {
     return this.reservasService.update(id, updateReservaDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.reservasService.remove(id);
   }
 
   @Get()
-  findAll() {
+  async findAll() {
     return this.reservasService.findAll();
   }
 }

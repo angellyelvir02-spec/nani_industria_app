@@ -4,27 +4,53 @@ import { ENDPOINTS } from "../../../constants/apiConfig";
 
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import {
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 interface Props {
   onBack: () => void;
 }
 
-export default function BabysitterBookingHistory({ onBack }: Props) {
-  const [filter, setFilter] = useState<
-    "all" | "pending" | "confirmed" | "in_progress" | "completed"
-  >("all");
-  const [searchQuery, setSearchQuery] = useState("");
+type BookingStatus = "all" | "pending" | "confirmed" | "in_progress" | "completed";
 
+export default function BabysitterBookingHistory({ onBack }: Props) {
+  const [filter, setFilter] = useState<BookingStatus>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const normalizeStatus = (
+    estado: string
+  ): "pending" | "confirmed" | "in_progress" | "completed" => {
+    const estadoNormalizado = (estado || "").toString().trim().toLowerCase();
+
+    if (estadoNormalizado === "pendiente") return "pending";
+    if (estadoNormalizado === "confirmado") return "confirmed";
+    if (
+      estadoNormalizado === "en progreso" ||
+      estadoNormalizado === "en_progreso"
+    ) {
+      return "in_progress";
+    }
+    if (
+      estadoNormalizado === "finalizado" ||
+      estadoNormalizado === "finalizada" ||
+      estadoNormalizado === "completado" ||
+      estadoNormalizado === "completada"
+    ) {
+      return "completed";
+    }
+
+    return "pending";
+  };
+
   const fetchBookings = async () => {
     try {
       setLoading(true);
@@ -33,64 +59,68 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
 
       if (!userId) {
         console.log("No se encontró userId");
+        setBookings([]);
         return;
       }
 
-      const response = await fetch(ENDPOINTS.get_reservas_ninera(userId));
-      const data = await response.json();
+      const url = ENDPOINTS.get_reservas_ninera(userId);
+      console.log("Consultando reservas en:", url);
+
+      const response = await fetch(url);
+      const data = await response.json().catch(() => []);
 
       if (!response.ok) {
         console.log("Error obteniendo reservas:", data);
+        setBookings([]);
         return;
       }
 
-      const mappedBookings = data.map((item: any) => {
-        const clientePersona = item.cliente?.persona;
-        const fecha = item.fecha_servicio || "";
-        const horaInicio = item.hora_inicio || "";
-        const horaFin = item.hora_fin || "";
+      const reservasArray = Array.isArray(data) ? data : [];
 
-        const estadoNormalizado = (item.estado || "")
-          .toString()
-          .trim()
-          .toLowerCase();
+      const mappedBookings = reservasArray.map((item: any) => {
+        const clientePersona = item?.cliente?.persona;
+        const fecha = item?.fecha_servicio || "";
+        const horaInicio = item?.hora_inicio || "";
+        const horaFin = item?.hora_fin || "";
 
-        let status: "pending" | "confirmed" | "in_progress" | "completed" = "pending";
+        const status = normalizeStatus(item?.estado || "");
 
-        if (estadoNormalizado === "pendiente") {
-          status = "pending";
-        } else if (estadoNormalizado === "confirmado") {
-          status = "confirmed";
-        } else if (estadoNormalizado === "en progreso") {
-          status = "in_progress";
-        } else if (estadoNormalizado === "finalizado") {
-          status = "completed";
-        }
-      
         return {
-          id: item.id,
+          id: item?.id,
           clientName: clientePersona
-            ? `${clientePersona.nombre} ${clientePersona.apellido}`
+            ? `${clientePersona?.nombre || ""} ${clientePersona?.apellido || ""}`.trim()
             : "Cliente",
           clientPhoto:
-            clientePersona?.foto_url || "https://via.placeholder.com/150",
+            clientePersona?.foto_url ||
+            "https://via.placeholder.com/150",
           date: fecha,
-          time: `${horaInicio} - ${horaFin}`,
-          duration: item.duracion_horas || 0,
-          children: 0,
-          payment: 0,
+          time: horaInicio && horaFin ? `${horaInicio} - ${horaFin}` : horaInicio || horaFin || "Horario no disponible",
+          duration: item?.duracion_horas || 0,
+          children:
+            item?.cantidad_ninos ??
+            item?.ninos_cantidad ??
+            item?.total_ninos ??
+            0,
+          payment:
+            item?.monto_total ??
+            item?.total ??
+            item?.pago_total ??
+            item?.tarifa_total ??
+            0,
           status,
-          rating: null,
+          rating: item?.rating ?? null,
         };
       });
 
       setBookings(mappedBookings);
     } catch (error) {
       console.log("Error fetchBookings:", error);
+      setBookings([]);
     } finally {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     fetchBookings();
   }, []);
@@ -106,16 +136,31 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
 
   const totalEarnings = bookings
     .filter((b) => b.status === "completed")
-    .reduce((sum, b) => sum + b.payment, 0);
+    .reduce((sum, b) => sum + Number(b.payment || 0), 0);
 
   const completedCount = bookings.filter(
-    (b) => b.status === "completed",
+    (b) => b.status === "completed"
   ).length;
+
+  const getStatusText = (status: string) => {
+    if (status === "completed") return "Finalizado";
+    if (status === "in_progress") return "En progreso";
+    if (status === "confirmed") return "Confirmado";
+    return "Pendiente";
+  };
+
+  const getStatusStyle = (status: string) => {
+    if (status === "completed") return styles.completed;
+    if (status === "in_progress") return styles.inProgress;
+    if (status === "confirmed") return styles.confirmed;
+    return styles.pending;
+  };
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <Text style={{ textAlign: "center", marginTop: 50 }}>
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color="#886BC1" />
+        <Text style={{ textAlign: "center", marginTop: 12 }}>
           Cargando reservas...
         </Text>
       </View>
@@ -125,7 +170,6 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
   return (
     <View style={styles.container}>
       <ScrollView>
-        {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <TouchableOpacity style={styles.backButton} onPress={onBack}>
@@ -135,7 +179,6 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
             <Text style={styles.headerTitle}>Historial de Reservas</Text>
           </View>
 
-          {/* STATS */}
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>Completadas</Text>
@@ -144,12 +187,11 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
 
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>Ganado total</Text>
-              <Text style={styles.statValue}>${totalEarnings}</Text>
+              <Text style={styles.statValue}>L {totalEarnings}</Text>
             </View>
           </View>
         </View>
 
-        {/* SEARCH */}
         <View style={styles.searchContainer}>
           <View style={styles.searchBox}>
             <Ionicons name="search" size={18} color="gray" />
@@ -161,7 +203,6 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
             />
           </View>
 
-          {/* FILTERS */}
           <View style={styles.filterRow}>
             <TouchableOpacity
               style={[
@@ -182,42 +223,6 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
             <TouchableOpacity
               style={[
                 styles.filterButton,
-                filter === "completed" && styles.activeFilter,
-              ]}
-              onPress={() => setFilter("completed")}
-            >
-              <Text
-                style={
-                  filter === "completed"
-                    ? styles.activeFilterText
-                    : styles.filterText
-                }
-              >
-                Completadas
-              </Text>
-            </TouchableOpacity>
-
-            {/* Todas 
-            <TouchableOpacity
-              style={[
-                styles.filterButton,
-                filter === "all" && styles.activeFilter,
-              ]}
-              onPress={() => setFilter("all")}
-            >
-              <Text
-                style={
-                  filter === "all" ? styles.activeFilterText : styles.filterText
-                }
-              >
-                Todas
-              </Text>
-            </TouchableOpacity>*/}
-              
-            {/* Pendientes */}
-            <TouchableOpacity
-              style={[
-                styles.filterButton,
                 filter === "pending" && styles.activeFilter,
               ]}
               onPress={() => setFilter("pending")}
@@ -232,8 +237,7 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
                 Pendientes
               </Text>
             </TouchableOpacity>
-              
-            {/* Confirmadas */}
+
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -251,8 +255,7 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
                 Confirmadas
               </Text>
             </TouchableOpacity>
-              
-            {/* En progreso */}
+
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -270,8 +273,7 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
                 En progreso
               </Text>
             </TouchableOpacity>
-              
-            {/* Finalizadas */}
+
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -292,60 +294,55 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
           </View>
         </View>
 
-        {/* BOOKINGS */}
         <View style={{ padding: 20 }}>
-          {filteredBookings.map((booking) => (
-            <View key={booking.id} style={styles.bookingCard}>
-              <Image
-                source={{ uri: booking.clientPhoto }}
-                style={styles.clientPhoto}
-              />
+          {filteredBookings.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No hay reservas</Text>
+              <Text style={styles.emptyText}>
+                No encontramos reservas con ese filtro o búsqueda.
+              </Text>
+            </View>
+          ) : (
+            filteredBookings.map((booking) => (
+              <View key={booking.id} style={styles.bookingCard}>
+                <Image
+                  source={{ uri: booking.clientPhoto }}
+                  style={styles.clientPhoto}
+                />
 
-              <View style={{ flex: 1 }}>
-                <Text style={styles.clientName}>{booking.clientName}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.clientName}>{booking.clientName}</Text>
 
-                <View style={styles.row}>
-                  <MaterialIcons name="calendar-month" size={16} color="gray" />
-                  <Text style={styles.infoText}>{booking.date}</Text>
-                </View>
+                  <View style={styles.row}>
+                    <MaterialIcons
+                      name="calendar-month"
+                      size={16}
+                      color="gray"
+                    />
+                    <Text style={styles.infoText}>{booking.date}</Text>
+                  </View>
 
-                <View style={styles.row}>
-                  <Ionicons name="time-outline" size={16} color="gray" />
-                  <Text style={styles.infoText}>{booking.time}</Text>
-                </View>
+                  <View style={styles.row}>
+                    <Ionicons name="time-outline" size={16} color="gray" />
+                    <Text style={styles.infoText}>{booking.time}</Text>
+                  </View>
 
-                <View style={styles.footerRow}>
-                  <Text style={styles.childrenText}>
-                    {booking.children} niños
-                  </Text>
+                  <View style={styles.footerRow}>
+                    <Text style={styles.childrenText}>
+                      {booking.children} niños
+                    </Text>
 
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={styles.payment}>${booking.payment}</Text>
-
-                    <Text
-                    style={
-                      booking.status === "completed"
-                        ? styles.completed
-                        : booking.status === "in_progress"
-                        ? styles.inProgress
-                        : booking.status === "confirmed"
-                        ? styles.confirmed
-                        : styles.pending
-                    }
-                  >
-                    {booking.status === "completed"
-                      ? "Finalizado"
-                      : booking.status === "in_progress"
-                      ? "En progreso"
-                      : booking.status === "confirmed"
-                      ? "Confirmado"
-                      : "Pendiente"}
-                  </Text>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={styles.payment}>L {booking.payment}</Text>
+                      <Text style={getStatusStyle(booking.status)}>
+                        {getStatusText(booking.status)}
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </View>
-            </View>
-          ))}
+            ))
+          )}
         </View>
       </ScrollView>
     </View>
@@ -356,6 +353,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FAFAFA",
+  },
+
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   header: {
@@ -403,6 +405,7 @@ const styles = StyleSheet.create({
   statValue: {
     color: "white",
     fontSize: 22,
+    fontWeight: "bold",
   },
 
   searchContainer: {
@@ -425,6 +428,7 @@ const styles = StyleSheet.create({
 
   filterRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
   },
 
@@ -434,6 +438,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "#ddd",
+    marginBottom: 6,
   },
 
   activeFilter: {
@@ -467,6 +472,7 @@ const styles = StyleSheet.create({
   clientName: {
     fontSize: 16,
     marginBottom: 4,
+    fontWeight: "600",
   },
 
   row: {
@@ -493,30 +499,49 @@ const styles = StyleSheet.create({
   payment: {
     fontSize: 16,
     color: "#886BC1",
+    fontWeight: "bold",
   },
 
   completed: {
     color: "green",
     fontSize: 12,
-  },
-
-  cancelled: {
-    color: "red",
-    fontSize: 12,
+    fontWeight: "600",
   },
 
   pending: {
     color: "#E69B00",
     fontSize: 12,
+    fontWeight: "600",
   },
 
   confirmed: {
     color: "#2D9CDB",
     fontSize: 12,
+    fontWeight: "600",
   },
 
   inProgress: {
     color: "#9B51E0",
     fontSize: 12,
+    fontWeight: "600",
+  },
+
+  emptyCard: {
+    backgroundColor: "white",
+    borderRadius: 15,
+    padding: 20,
+    alignItems: "center",
+  },
+
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 6,
+    color: "#2E2E2E",
+  },
+
+  emptyText: {
+    color: "#666",
+    textAlign: "center",
   },
 });

@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, BadRequestException } from '@nestjs/common';
 import { DisponibilidadService } from './disponibilidad.service';
 
 @Controller('disponibilidad')
@@ -17,6 +17,18 @@ export class DisponibilidadController {
       }[];
     },
   ) {
+    if (!body) {
+      throw new BadRequestException('El body es requerido');
+    }
+
+    if (!body.usuario_id) {
+      throw new BadRequestException('usuario_id es requerido');
+    }
+
+    if (!Array.isArray(body.disponibilidad)) {
+      throw new BadRequestException('disponibilidad debe ser un arreglo');
+    }
+
     return this.disponibilidadService.saveDisponibilidad(body);
   }
 }

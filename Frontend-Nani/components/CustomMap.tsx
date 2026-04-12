@@ -1,77 +1,28 @@
 import React from "react";
-import { Image, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import MapView from "react-native-maps";
 
-/**
- * Muestra una vista previa estática del mapa usando coordenadas.
- * Al presionar, abre la ubicación en Google Maps.
- */
-export default function CustomMap({ region }: any) {
-  // Nivel de zoom usado para generar la imagen del mapa
-  const zoom = 16;
+interface CustomMapProps {
+  region: any;
+  onRegionChangeComplete?: (region: any) => void;
+}
 
-  // URL de la imagen estática del mapa con marcador en la ubicación recibida
-  const mapUrl = `https://static-maps.yandex.ru/1.x/?ll=${region.longitude},${region.latitude}&z=${zoom}&l=map&pt=${region.longitude},${region.latitude},pm2rdm`;
-
+export default function CustomMap({
+  region,
+  onRegionChangeComplete,
+}: CustomMapProps) {
   return (
     <View style={styles.container}>
-      <Image
-        source={{ uri: mapUrl }}
-        style={styles.mapImage}
-        resizeMode="cover"
+      <MapView
+        style={StyleSheet.absoluteFillObject}
+        region={region}
+        onRegionChangeComplete={onRegionChangeComplete}
+        showsUserLocation={true}
       />
-
-      <TouchableOpacity
-        style={styles.overlay}
-        onPress={() =>
-          Linking.openURL(
-            `https://www.google.com/maps/search/?api=1&query=${region.latitude},${region.longitude}`
-          )
-        }
-      >
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>Ver en pantalla completa ↗</Text>
-        </View>
-      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // Contenedor principal del mapa
-  container: {
-    flex: 1,
-    minHeight: 250,
-    borderRadius: 15,
-    overflow: "hidden",
-    backgroundColor: "#E5E7EB",
-  },
-
-  // Imagen que muestra el mapa estático
-  mapImage: {
-    width: "100%",
-    height: "100%",
-  },
-
-  // Capa presionable colocada sobre toda la imagen
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "flex-end",
-    alignItems: "center",
-    paddingBottom: 10,
-  },
-
-  // Etiqueta mostrada sobre el mapa
-  badge: {
-    backgroundColor: "rgba(136, 107, 193, 0.9)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-
-  // Texto de la etiqueta
-  badgeText: {
-    color: "white",
-    fontSize: 11,
-    fontWeight: "bold",
-  },
+  container: { flex: 1, overflow: "hidden" },
 });

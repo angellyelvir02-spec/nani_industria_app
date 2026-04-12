@@ -5,6 +5,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
@@ -196,7 +197,10 @@ export default function ClientRegistrationForm() {
           </View>
         </View>
       </LinearGradient>
-
+<KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1 }}
+    >
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Datos de acceso</Text>
@@ -283,6 +287,7 @@ export default function ClientRegistrationForm() {
           )}
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }

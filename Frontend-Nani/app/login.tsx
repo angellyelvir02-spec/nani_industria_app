@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -95,11 +97,33 @@ export default function LoginScreen() {
 
       const data = await response.json();
 
-      if (!response.ok) {
-        Alert.alert("Atención", data.message || "Credenciales incorrectas");
-        return;
-      }
+   if (!response.ok) {
+  setLoading(false);
+  const data = await response.json().catch(() => ({}));
+  let mensaje = "";
 
+  // 1. Determinar el mensaje según el status
+  if (response.status === 404) {
+    mensaje = "Este correo no está registrado.";
+    setEmailError(mensaje);
+  } else if (response.status === 401) {
+    mensaje = "La contraseña o el correo es incorrecta.";
+    setPasswordError(mensaje);
+  } else {
+    mensaje = data.message || "Ocurrió un error inesperado";
+  }
+
+  // 2. DISPARAR LA ALERTA SEGÚN LA PLATAFORMA (Igual que en tu HomeScreen)
+  if (Platform.OS === 'web') {
+    // En web usamos el alert nativo del navegador
+    window.alert(mensaje); 
+  } else {
+    // En celular usamos el Alert de React Native
+    Alert.alert("Atención", mensaje);
+  }
+
+  return;
+}
       try {
         // Guardado de datos de sesión en almacenamiento local
         if (data.user && data.user.id) {
@@ -149,6 +173,11 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient colors={["#FF7A8A", "#8B6CCB"]} style={styles.container}>
+      <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1 }}
+    >
+      
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* Logo */}
         <View style={styles.logoContainer}>
@@ -299,6 +328,7 @@ export default function LoginScreen() {
           </View>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </LinearGradient>
   );
 }

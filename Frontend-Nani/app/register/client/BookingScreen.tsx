@@ -64,7 +64,6 @@ export default function BookingScreen() {
   );
   const [isConfirming, setIsConfirming] = useState(false);
 
-  // Memoización de datos de la niñera para evitar re-renders innecesarios
   const babysitter = useMemo(
     () => ({
       name: name ? String(name) : "Cargando...",
@@ -74,9 +73,6 @@ export default function BookingScreen() {
     [name, photo, hourlyRate],
   );
 
-  // --- EFECTOS ---
-
-  // Carga inicial de niños y métodos de pago
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
@@ -111,7 +107,6 @@ export default function BookingScreen() {
         const response = await fetch(ENDPOINTS.get_disponibilidad(id, fecha));
         const data = await response.json();
         setTimeSlots(data || []);
-        // Resetear horas al cambiar de día para evitar errores de lógica
         setSelectedStartTime(null);
         setSelectedEndTime(null);
       } catch (error) {
@@ -226,17 +221,16 @@ export default function BookingScreen() {
     try {
       const token = await AsyncStorage.getItem("userToken");
 
-      // Body combinado (con todos los campos necesarios)
       const body = {
         ninera_id: id,
         metodo_pago_id: metodoSeleccionado,
         fecha_servicio: selectedDate,
         hora_inicio: selectedStartTime,
         hora_fin: selectedEndTime,
-        duracion_horas: duration, // ← tuyo
-        monto_base: pricing.subtotal, // ← tuyo
-        monto_comision: pricing.fee, // ← tuyo
-        propina: 0, // ← tuyo
+        duracion_horas: duration,
+        monto_base: pricing.subtotal,
+        monto_comision: pricing.fee,
+        propina: 0,
         notas_importantes: notas,
         ninos_ids: selectedNinos,
       };
@@ -257,7 +251,6 @@ export default function BookingScreen() {
         throw new Error(result.message || "Error en la reserva");
       }
 
-      // --- TU LÓGICA DE PAGO Y REDIRECCIÓN (mejor) ---
       const esTarjeta = metodosPago
         .find((m) => m.id === metodoSeleccionado)
         ?.nombre.toLowerCase()
@@ -271,7 +264,6 @@ export default function BookingScreen() {
       } else {
         const ninosDetalle = ninos.filter((n) => selectedNinos.includes(n.id));
 
-        // Mensaje de éxito multiplataforma (de ella)
         const successMsg = "Reserva creada correctamente.";
 
         if (Platform.OS === "web") {
@@ -308,9 +300,8 @@ export default function BookingScreen() {
         }
       }
     } catch (error: any) {
-      console.error("🔥 Error:", error);
+      console.error("Error:", error);
 
-      // Manejo de errores multiplataforma (de ella)
       if (Platform.OS === "web") {
         window.alert("Error: " + (error.message || "No se pudo conectar"));
       } else {
@@ -324,7 +315,6 @@ export default function BookingScreen() {
     }
   };
 
-  // --- RENDER ---
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
@@ -351,8 +341,15 @@ export default function BookingScreen() {
               source={{ uri: babysitter.photo }}
               style={styles.babysitterImage}
             />
-            <View>
-              <Text style={styles.babysitterName}>{babysitter.name}</Text>
+            {/* AGREGAMOS flex: 1 AQUÍ */}
+            <View style={{ flex: 1 }}>
+              <Text
+                style={styles.babysitterName}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {babysitter.name}
+              </Text>
               <Text style={styles.babysitterRate}>
                 L {babysitter.hourlyRate.toFixed(2)}/h
               </Text>
@@ -470,8 +467,8 @@ export default function BookingScreen() {
                   const inRange =
                     selectedStartTime &&
                     selectedEndTime &&
-                    slot.time > selectedStartTime &&
-                    slot.time < selectedEndTime;
+                    slot.time >= selectedStartTime &&
+                    slot.time <= selectedEndTime;
                   const isSelected = isStart || isEnd || inRange;
 
                   return (
@@ -617,9 +614,10 @@ const styles = StyleSheet.create({
     gap: 14,
     marginBottom: 16,
     elevation: 2,
+    overflow: "hidden",
   },
   babysitterImage: { width: 60, height: 60, borderRadius: 30 },
-  babysitterName: { fontSize: 18, fontWeight: "700" },
+  babysitterName: { fontSize: 18, fontWeight: "700", flexShrink: 1 },
   babysitterRate: { color: "#886BC1", fontWeight: "600" },
   sectionCard: {
     backgroundColor: "#FFF",

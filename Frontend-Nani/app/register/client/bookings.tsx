@@ -241,7 +241,7 @@ export default function BookingsListScreen() {
                       style={styles.qrEntryButton}
                       onPress={() =>
                         router.push({
-                          pathname: "/register/client/ClientJobTracking",
+                          pathname: "/register/client/ClientActiveSession",
                           params: { bookingId: booking.id },
                         })
                       }
@@ -251,7 +251,7 @@ export default function BookingsListScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
-                
+
                 {booking.status === "en_progreso" && (
                   <View style={styles.qrButtonsRow}>
                     <TouchableOpacity

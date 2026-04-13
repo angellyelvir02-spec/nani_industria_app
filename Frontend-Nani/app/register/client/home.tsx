@@ -374,7 +374,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.navItem}
-            onPress={() => router.push("/register/client/chat" as any)}
+            onPress={() => router.push("/register/client/ChatList" as any)}
           >
             <View style={styles.chatIconWrapper}>
               <Ionicons

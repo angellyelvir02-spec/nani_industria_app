@@ -1,4 +1,4 @@
-const DEV_IP = "192.168.0.13";
+const DEV_IP = "192.168.137.1";
 const PORT = "3000";
 
 export const API_URL = `http://${DEV_IP}:${PORT}`;

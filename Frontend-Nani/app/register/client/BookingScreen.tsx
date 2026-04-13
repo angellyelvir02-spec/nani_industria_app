@@ -122,8 +122,6 @@ export default function BookingScreen() {
     fetchAvailability(selectedDate);
   }, [selectedDate, fetchAvailability]);
 
-  // --- LÓGICA DE NEGOCIO ---
-
   const calendarDays = useMemo(() => {
     const days = [];
     const locale = "es-ES";
@@ -150,20 +148,25 @@ export default function BookingScreen() {
       setSelectedStartTime(time);
       setSelectedEndTime(null);
     } else {
-      // Si selecciona una hora anterior a la de inicio, la convertimos en la nueva hora de inicio
-      if (time <= selectedStartTime) {
+      if (time < selectedStartTime) {
+        setSelectedEndTime(selectedStartTime);
         setSelectedStartTime(time);
+      } else if (time === selectedStartTime) {
         setSelectedEndTime(null);
-        return;
+      } else {
+        setSelectedEndTime(time);
       }
-      setSelectedEndTime(time);
     }
   };
 
   const duration = useMemo(() => {
-    if (!selectedStartTime || !selectedEndTime) return 0;
+    if (!selectedStartTime) return 0;
+
+    if (!selectedStartTime || !selectedEndTime) return 1;
+
     const start = parseInt(selectedStartTime.split(":")[0]);
     const end = parseInt(selectedEndTime.split(":")[0]);
+
     return end - start + 1;
   }, [selectedStartTime, selectedEndTime]);
 
@@ -187,11 +190,11 @@ export default function BookingScreen() {
       return;
     }
 
-    if (!selectedStartTime || !selectedEndTime) {
+    if (!selectedStartTime) {
       if (Platform.OS === "web") {
-        window.alert("Debes elegir inicio y fin.");
+        window.alert("Debes elegir al menos una hora.");
       } else {
-        Alert.alert("Selección de tiempo", "Debes elegir inicio y fin.");
+        Alert.alert("Selección de tiempo", "Debes elegir al menos una hora.");
       }
       return;
     }
@@ -226,10 +229,11 @@ export default function BookingScreen() {
         metodo_pago_id: metodoSeleccionado,
         fecha_servicio: selectedDate,
         hora_inicio: selectedStartTime,
-        hora_fin: selectedEndTime,
+        hora_fin: selectedEndTime || selectedStartTime,
         duracion_horas: duration,
         monto_base: pricing.subtotal,
         monto_comision: pricing.fee,
+        tarifa_por_hora: babysitter.hourlyRate,
         propina: 0,
         notas_importantes: notas,
         ninos_ids: selectedNinos,
@@ -462,14 +466,23 @@ export default function BookingScreen() {
             ) : (
               <View style={styles.slotsGrid}>
                 {timeSlots.map((slot) => {
-                  const isStart = slot.time === selectedStartTime;
-                  const isEnd = slot.time === selectedEndTime;
-                  const inRange =
-                    selectedStartTime &&
-                    selectedEndTime &&
-                    slot.time >= selectedStartTime &&
-                    slot.time <= selectedEndTime;
-                  const isSelected = isStart || isEnd || inRange;
+                  const currentHour = parseInt(slot.time.split(":")[0]);
+                  const startHour = selectedStartTime
+                    ? parseInt(selectedStartTime.split(":")[0])
+                    : null;
+                  const endHour = selectedEndTime
+                    ? parseInt(selectedEndTime.split(":")[0])
+                    : null;
+
+                  let isSelected = false;
+
+                  if (startHour !== null && endHour !== null) {
+                    const min = Math.min(startHour, endHour);
+                    const max = Math.max(startHour, endHour);
+                    isSelected = currentHour >= min && currentHour <= max;
+                  } else if (startHour !== null) {
+                    isSelected = currentHour === startHour;
+                  }
 
                   return (
                     <TouchableOpacity
@@ -493,6 +506,10 @@ export default function BookingScreen() {
                     </TouchableOpacity>
                   );
                 })}
+                <Text style={{ fontSize: 12, color: "#888", marginTop: 8 }}>
+                  Puedes seleccionar una sola hora o un rango. Si eliges solo
+                  una, se reservará 1 hora.
+                </Text>
               </View>
             )}
           </View>
@@ -558,11 +575,13 @@ export default function BookingScreen() {
           <TouchableOpacity
             style={[
               styles.confirmButton,
-              (duration === 0 || selectedNinos.length === 0 || isConfirming) &&
+              (!selectedStartTime ||
+                selectedNinos.length === 0 ||
+                isConfirming) &&
                 styles.btnDisabled,
             ]}
             disabled={
-              duration === 0 || selectedNinos.length === 0 || isConfirming
+              !selectedStartTime || selectedNinos.length === 0 || isConfirming
             }
             onPress={handleConfirmarReserva}
           >

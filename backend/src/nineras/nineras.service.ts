@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { Disponibilidad_reserva } from './dto/disponibilidad.dto';
@@ -208,7 +209,10 @@ export class NinerasService {
         .maybeSingle();
 
       if (nineraError) {
-        console.error('Error buscando niñera en updateFotoPerfil:', nineraError);
+        console.error(
+          'Error buscando niñera en updateFotoPerfil:',
+          nineraError,
+        );
         throw new InternalServerErrorException(
           `Error de base de datos: ${nineraError.message}`,
         );
@@ -218,7 +222,6 @@ export class NinerasService {
         throw new NotFoundException('No se encontró la niñera');
       }
 
-      // Se normaliza el nombre del archivo para evitar caracteres problemáticos
       const safeOriginalName = foto.originalname.replace(/[^\w.\-]/g, '_');
       const fileName = `perfil-${usuarioId}-${Date.now()}-${safeOriginalName}`;
 
@@ -230,7 +233,10 @@ export class NinerasService {
         });
 
       if (uploadError) {
-        console.error('Error subiendo imagen en updateFotoPerfil:', uploadError);
+        console.error(
+          'Error subiendo imagen en updateFotoPerfil:',
+          uploadError,
+        );
         throw new InternalServerErrorException(
           `Error subiendo imagen: ${uploadError.message}`,
         );
@@ -286,7 +292,6 @@ export class NinerasService {
     const { nineraId, fecha } = dto;
     const client = this.supabaseService.getAdminClient();
 
-    // Mapeo de días en español según el valor esperado en base de datos
     const diasSemanas = [
       'Domingo',
       'Lunes',
@@ -313,7 +318,6 @@ export class NinerasService {
         `Consulta Nani: ${fecha} -> Detectado como: ${diaSemanaNombre}`,
       );
 
-      // Obtiene el horario configurado para ese día
       const { data: horarioBase, error: errorBase } = await client
         .from('disponibilidad_ninera')
         .select('hora_inicio, hora_fin')
@@ -331,12 +335,10 @@ export class NinerasService {
         );
       }
 
-      // Si no existe horario configurado para ese día, retorna vacío
       if (!horarioBase) {
         return [];
       }
 
-      // Obtiene reservas activas para esa fecha
       const { data: reservas, error: reservasError } = await client
         .from('reserva')
         .select('hora_inicio, hora_fin')
@@ -365,8 +367,7 @@ export class NinerasService {
         );
       }
 
-      // Genera bloques por hora dentro del rango configurado
-      for (let hora = inicio; hora < fin; hora++) {
+      for (let hora = inicio; hora <= fin; hora++) {
         const horaStr = `${hora.toString().padStart(2, '0')}:00`;
 
         const estaOcupado = (reservas ?? []).some((res) => {
@@ -377,7 +378,7 @@ export class NinerasService {
             return false;
           }
 
-          return hora >= resInicio && hora < resFin;
+          return hora >= resInicio && hora <= resFin;
         });
 
         slots.push({
@@ -398,5 +399,65 @@ export class NinerasService {
         'Error interno al obtener horarios disponibles',
       );
     }
+  }
+
+  //mostrar reseñas en el perfil de la niñera
+
+  async obtenerResenasPorNinera(nineraId: string) {
+    const admin = this.supabaseService.getAdminClient();
+    const { data: ninera } = await admin
+      .from('ninera')
+      .select('usuario_id')
+      .eq('id', nineraId)
+      .single();
+
+    if (!ninera) throw new BadRequestException('Niñera no encontrada');
+
+    const { data, error } = await admin
+      .from('resena')
+      .select(
+        `
+      id,
+      puntuacion,
+      comentario,
+      created_at,
+      autor:usuario!resenas_autor_id_fkey (
+        id,
+        cliente!cliente_usuario_id_fkey ( 
+          persona:persona (
+            nombre,
+            apellido,
+            foto_url
+          )
+        )
+      )
+    `,
+      )
+      .eq('receptor_id', ninera.usuario_id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new BadRequestException(
+        `Error al obtener reseñas: ${error.message}`,
+      );
+    }
+
+    return data.map((r: any) => {
+      const cliente = Array.isArray(r.autor?.cliente)
+        ? r.autor.cliente[0]
+        : r.autor?.cliente;
+      const persona = cliente?.persona;
+
+      return {
+        id: r.id,
+        puntuacion: r.puntuacion,
+        comentario: r.comentario,
+        created_at: r.created_at,
+        autor_nombre: persona
+          ? `${persona.nombre} ${persona.apellido}`.trim()
+          : 'Usuario de Nani',
+        autor_foto: persona?.foto_url || null,
+      };
+    });
   }
 }

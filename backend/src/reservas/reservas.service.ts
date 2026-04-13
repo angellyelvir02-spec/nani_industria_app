@@ -13,19 +13,12 @@ export class ReservasService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
   private calcularDuracionHoras(horaInicio: string, horaFin: string): number {
-    const [inicioH, inicioM] = horaInicio.split(':').map(Number);
-    const [finH, finM] = horaFin.split(':').map(Number);
+    if (!horaInicio || !horaFin) return 1;
+    const inicio = parseInt(horaInicio.split(':')[0], 10);
+    const fin = parseInt(horaFin.split(':')[0], 10);
 
-    const minutosInicio = inicioH * 60 + inicioM;
-    const minutosFin = finH * 60 + finM;
-
-    if (minutosFin <= minutosInicio) {
-      throw new BadRequestException(
-        'La hora de fin debe ser mayor que la hora de inicio',
-      );
-    }
-
-    return (minutosFin - minutosInicio) / 60;
+    if (inicio === fin) return 1;
+    return Math.abs(fin - inicio) + 1;
   }
 
   private formatDurationFromHours(hours: number): string {
@@ -89,6 +82,7 @@ export class ReservasService {
       createReservaDto.hora_fin,
     );
 
+    const tarifaReal = Number((createReservaDto as any).tarifa_por_hora) || 0;
     const montoBase = Number((createReservaDto as any).monto_base);
     const comisionNani = Number((createReservaDto as any).monto_comision);
     const propina = Number((createReservaDto as any).propina || 0);
@@ -137,7 +131,7 @@ export class ReservasService {
       .insert({
         reserva_id: reserva.id,
         hora_programada: Number(duracion),
-        tarifa_por_hora: Number(tarifaPorHora),
+        tarifa_por_hora: Number(tarifaReal),
         servicio_base: Number(montoBase),
         tiempo_espera_minutos: 0,
         cargo_tiempo_adicional: 0,
@@ -911,6 +905,110 @@ export class ReservasService {
       workedHours: Number(workedHours.toFixed(2)),
       cargosAdicionales: Number(cargoTiempoAdicional.toFixed(2)),
       totalFinal: Number(totalFinal.toFixed(2)),
+    };
+  }
+
+  ///////Permite al cliente crear reseñas
+
+  async crearResena(resenaDto: any, authUserId: string) {
+    const admin = this.supabaseService.getAdminClient();
+
+    const malasPalabras = [
+      'estupida',
+      'basura',
+      'mierda',
+      'puto',
+      'puta',
+      'estupido',
+      'pendeja',
+      'pendejo',
+    ];
+    const comentarioLimpio = resenaDto.comentario.toLowerCase();
+    const contieneInsultos = malasPalabras.some((palabra) =>
+      comentarioLimpio.includes(palabra),
+    );
+
+    if (contieneInsultos) {
+      throw new BadRequestException(
+        'El comentario contiene lenguaje inapropiado.',
+      );
+    }
+
+    if (resenaDto.reserva_id) {
+      const { data: existeResena } = await admin
+        .from('resena')
+        .select('id')
+        .eq('reserva_id', resenaDto.reserva_id)
+        .maybeSingle();
+
+      if (existeResena) {
+        throw new BadRequestException(
+          'Ya has calificado esta reserva anteriormente.',
+        );
+      }
+    }
+
+    const { data: usuarioAutor, error: errorUser } = await admin
+      .from('usuario')
+      .select('id')
+      .eq('auth_id', authUserId)
+      .maybeSingle();
+
+    if (errorUser || !usuarioAutor) {
+      throw new BadRequestException('Tu cuenta de usuario no fue encontrada.');
+    }
+
+    const { data: nineraData, error: errorNinera } = await admin
+      .from('ninera')
+      .select('usuario_id')
+      .eq('id', resenaDto.ninera_id)
+      .maybeSingle();
+
+    if (errorNinera || !nineraData) {
+      throw new BadRequestException('No se encontró el perfil de la niñera.');
+    }
+
+    const { data: nuevaResena, error: errorInsert } = await admin
+      .from('resena')
+      .insert({
+        reserva_id: resenaDto.reserva_id || null,
+        autor_id: usuarioAutor.id,
+        receptor_id: nineraData.usuario_id,
+        puntuacion: Number(resenaDto.puntuacion),
+        comentario: resenaDto.comentario,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (errorInsert) {
+      if (errorInsert.code === '23505') {
+        throw new BadRequestException('Esta reserva ya cuenta con una reseña.');
+      }
+      throw new BadRequestException(
+        `Error al insertar reseña: ${errorInsert.message}`,
+      );
+    }
+
+    const { data: resenas } = await admin
+      .from('resena')
+      .select('puntuacion')
+      .eq('receptor_id', nineraData.usuario_id);
+
+    if (resenas && resenas.length > 0) {
+      const suma = resenas.reduce((acc, curr) => acc + curr.puntuacion, 0);
+      const promedio = parseFloat((suma / resenas.length).toFixed(1));
+
+      await admin
+        .from('ninera')
+        .update({ promedio_rating: promedio })
+        .eq('id', resenaDto.ninera_id);
+    }
+
+    return {
+      success: true,
+      message: '¡Reseña publicada exitosamente!',
+      data: nuevaResena,
     };
   }
 }

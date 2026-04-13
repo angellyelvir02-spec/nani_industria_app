@@ -25,9 +25,7 @@ export class NinerasController {
 
   // Retorna el perfil de la niñera asociado a un usuario
   @Get('/usuario/:usuarioId')
-  async findByUsuario(
-    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
-  ) {
+  async findByUsuario(@Param('usuarioId', ParseUUIDPipe) usuarioId: string) {
     return this.ninerasService.findOneByUsuario(usuarioId);
   }
 
@@ -57,7 +55,9 @@ export class NinerasController {
     @UploadedFile() foto: Express.Multer.File,
   ) {
     if (!foto) {
-      throw new BadRequestException('Debe enviar una imagen en el campo "foto"');
+      throw new BadRequestException(
+        'Debe enviar una imagen en el campo "foto"',
+      );
     }
 
     return this.ninerasService.updateFotoPerfil(usuarioId, foto);
@@ -76,9 +76,7 @@ export class NinerasController {
     @Query('fecha') fecha: string,
   ) {
     if (!fecha) {
-      throw new BadRequestException(
-        'El parámetro "fecha" es obligatorio',
-      );
+      throw new BadRequestException('El parámetro "fecha" es obligatorio');
     }
 
     const dto: Disponibilidad_reserva = {
@@ -87,5 +85,16 @@ export class NinerasController {
     };
 
     return this.ninerasService.getAvailableSlots(dto);
+  }
+
+  // para mostrar las reseñas en el perfil
+  @Get(':id/resenas')
+  async obtenerResenas(@Param('id') id: string) {
+    const resenas = await this.ninerasService.obtenerResenasPorNinera(id);
+
+    return {
+      success: true,
+      data: resenas,
+    };
   }
 }

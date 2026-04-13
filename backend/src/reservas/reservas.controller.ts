@@ -26,9 +26,7 @@ export class ReservasController {
   }
 
   @Get('mis-reservas/:usuarioId')
-  async getMisReservas(
-    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
-  ) {
+  async getMisReservas(@Param('usuarioId', ParseUUIDPipe) usuarioId: string) {
     return this.reservasService.findBookingsForClientApp(usuarioId);
   }
 
@@ -61,6 +59,7 @@ export class ReservasController {
     return this.reservasService.procesarCheckin(id, body);
   }
 
+  @UseGuards(SupabaseGuard)
   @Post(':id/checkout')
   async checkout(
     @Param('id', ParseUUIDPipe) id: string,
@@ -79,9 +78,7 @@ export class ReservasController {
   }
 
   @Get('ninera/:usuarioId')
-  async findByNinera(
-    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
-  ) {
+  async findByNinera(@Param('usuarioId', ParseUUIDPipe) usuarioId: string) {
     return this.reservasService.findByNinera(usuarioId);
   }
 
@@ -106,5 +103,27 @@ export class ReservasController {
   @Get()
   async findAll() {
     return this.reservasService.findAll();
+  }
+
+  // crear reseña y calificar
+  @Post('calificar')
+  @UseGuards(SupabaseGuard)
+  async calificar(@Body() body: any, @Req() req: any) {
+    const authUserIdFromToken =
+      req.user?.id || req.user?.sub || req.user?.user?.id;
+
+    if (!authUserIdFromToken) {
+      throw new BadRequestException(
+        'No se pudo identificar al usuario desde el token.',
+      );
+    }
+    const resenaDto = body.resenaDto || body;
+
+    console.log(
+      'DEBUG - Procesando reseña para Usuario ID:',
+      authUserIdFromToken,
+    );
+
+    return this.reservasService.crearResena(resenaDto, authUserIdFromToken);
   }
 }

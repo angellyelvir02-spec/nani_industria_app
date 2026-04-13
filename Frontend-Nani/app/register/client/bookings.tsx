@@ -9,6 +9,9 @@ import {
   ActivityIndicator,
   RefreshControl,
   SafeAreaView,
+  Modal,
+  TextInput,
+  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -38,6 +41,12 @@ export default function BookingsListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [bookings, setBookings] = useState<any[]>([]);
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [sendingReview, setSendingReview] = useState(false);
 
   const fetchBookings = async () => {
     try {
@@ -76,6 +85,47 @@ export default function BookingsListScreen() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const handlePostReview = async () => {
+    const comentarioLimpio = comment.trim();
+    if (!comentarioLimpio) {
+      Alert.alert("Atención", "Por favor, escribe un comentario.");
+      return;
+    }
+
+    try {
+      setSendingReview(true);
+      const token = await AsyncStorage.getItem("userToken");
+      const response = await fetch(ENDPOINTS.crear_resena, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          reserva_id: selectedBooking.id,
+          ninera_id: selectedBooking.ninera_id,
+          puntuacion: rating,
+          comentario: comentarioLimpio,
+        }),
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        Alert.alert("¡Gracias!", "Tu reseña ha sido publicada.");
+        setModalVisible(false);
+        setComment("");
+        setRating(5);
+        await fetchBookings();
+      } else {
+        Alert.alert("Atención", result.message || "Error al publicar reseña.");
+      }
+    } catch (error) {
+      Alert.alert("Error", "No pudimos conectar con el servidor.");
+    } finally {
+      setSendingReview(false);
     }
   };
 
@@ -132,29 +182,20 @@ export default function BookingsListScreen() {
     );
   };
 
-  // --- LÓGICA DE FILTRADO CORREGIDA ---
-  const today = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const todayStr = now.toISOString().split("T")[0];
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   const upcomingBookings = bookings.filter((b) => {
-    // Si está en curso, mostrar siempre en próximas
-    if (b.status === "en_progreso") return true;
-
-    // Para confirmadas y pendientes, validamos que sean de hoy o futuro
-    const isFutureOrToday = b.date >= today;
     return (
-      (b.status === "confirmed" || b.status === "pending") && isFutureOrToday
+      b.status === "confirmed" ||
+      b.status === "pending" ||
+      b.status === "en_progreso"
     );
   });
 
   const pastBookings = bookings.filter((b) => {
-    // Si está en curso, NO va al historial
-    if (b.status === "en_progreso") return false;
-
-    // Si está completada o cancelada, VA al historial siempre
-    if (b.status === "completed" || b.status === "cancelled") return true;
-
-    // Si la fecha ya pasó (ayer o antes) y no está confirmada/pendiente, va al historial
-    return b.date < today;
+    return b.status === "completed" || b.status === "cancelled";
   });
 
   if (loading && !refreshing) {
@@ -328,6 +369,13 @@ export default function BookingsListScreen() {
                         ? styles.reviewedButton
                         : styles.reviewButton
                     }
+                    onPress={() => {
+                      if (!booking.reviewed) {
+                        setSelectedBooking(booking);
+                        setModalVisible(true);
+                      }
+                    }}
+                    disabled={booking.reviewed}
                   >
                     <Text
                       style={
@@ -349,6 +397,54 @@ export default function BookingsListScreen() {
           )}
         </View>
       </ScrollView>
+      {/* --- MODAL DE CALIFICACIÓN --- */}
+      <Modal visible={modalVisible} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Calificar servicio</Text>
+            <Text style={styles.modalSubtitle}>
+              ¿Cómo fue tu experiencia con {selectedBooking?.babysitter}?
+            </Text>
+            <View style={styles.starsRow}>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <TouchableOpacity key={s} onPress={() => setRating(s)}>
+                  <Star
+                    size={32}
+                    color={s <= rating ? "#FF768A" : "#D1D5DB"}
+                    fill={s <= rating ? "#FF768A" : "transparent"}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Escribe tu comentario..."
+              multiline
+              value={comment}
+              onChangeText={setComment}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={handlePostReview}
+                disabled={sendingReview}
+              >
+                {sendingReview ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Publicar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -502,4 +598,58 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     marginBottom: 20,
   },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#2E2E2E",
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  starsRow: { flexDirection: "row", gap: 8, marginBottom: 20 },
+  textInput: {
+    width: "100%",
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    padding: 12,
+    height: 100,
+    textAlignVertical: "top",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 20,
+  },
+  modalActions: { flexDirection: "row", gap: 12, width: "100%" },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRadius: 12,
+    backgroundColor: "#F3F4F6",
+  },
+  cancelButtonText: { color: "#6B7280", fontWeight: "600" },
+  submitButton: {
+    flex: 2,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRadius: 12,
+    backgroundColor: "#886BC1",
+  },
+  submitButtonText: { color: "#FFFFFF", fontWeight: "700" },
 });

@@ -53,7 +53,7 @@ export default function QRScanner() {
     lat1: number,
     lon1: number,
     lat2: number,
-    lon2: number
+    lon2: number,
   ) => {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -75,7 +75,8 @@ export default function QRScanner() {
     String(latitude).trim() !== "" &&
     String(longitude).trim() !== "";
 
-  const getCheckInStorageKey = () => `booking_checkin_${String(bookingId || "")}`;
+  const getCheckInStorageKey = () =>
+    `booking_checkin_${String(bookingId || "")}`;
 
   const saveCheckInTime = async (value: string) => {
     if (!bookingId) return;
@@ -100,7 +101,10 @@ export default function QRScanner() {
     }
 
     // Si el QR trae bookingId, se valida contra la reserva actual
-    if (qrData.bookingId && String(qrData.bookingId) !== String(bookingId || "")) {
+    if (
+      qrData.bookingId &&
+      String(qrData.bookingId) !== String(bookingId || "")
+    ) {
       return false;
     }
 
@@ -138,6 +142,7 @@ export default function QRScanner() {
         setScanned(false);
         return;
       }
+      const token = await AsyncStorage.getItem("userToken");
 
       if (shouldValidateLocation) {
         setCheckingLocation(true);
@@ -153,15 +158,25 @@ export default function QRScanner() {
 
         const location = await Location.getCurrentPositionAsync({});
 
+        // --- AÑADE ESTO PARA DEBUGEAR ---
+        console.log("📍 MI UBICACIÓN ACTUAL (GPS):", {
+          lat: location.coords.latitude,
+          lng: location.coords.longitude,
+        });
+        console.log("🏠 UBICACIÓN DE LA RESERVA (Destino):", {
+          lat: Number(latitude),
+          lng: Number(longitude),
+        });
+        // --------------------------------
+
         const distance = calculateDistance(
           location.coords.latitude,
           location.coords.longitude,
           Number(latitude),
-          Number(longitude)
+          Number(longitude),
         );
 
-        // 0.1 km = 100 metros
-        if (distance > 0.1) {
+        if (distance > 5000.0) {
           setError("No estás en la ubicación correcta.");
           setCheckingLocation(false);
           setScanned(false);
@@ -181,16 +196,17 @@ export default function QRScanner() {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
               },
               body: JSON.stringify({
                 checkInTime: now,
                 qrCode: qrData?.code || null,
               }),
-            }
+            },
           );
-        
+
           const data = await response.json();
-        
+
           if (!response.ok) {
             throw new Error(data?.message || "Error en check-in");
           }
@@ -199,17 +215,17 @@ export default function QRScanner() {
           setScanned(false);
           return;
         }
-      
+
         // Guardado local (fallback)
         await saveCheckInTime(now);
-      
+
         router.replace({
           pathname: "./JobTracking",
           params: {
             bookingId,
             bookingCode,
             bookingStatus: "en_progreso",
-            scanMode: "checkout", // 🔥 clave
+            scanMode: "checkout",
             clientName,
             clientPhoto,
             address,
@@ -229,7 +245,7 @@ export default function QRScanner() {
             notes,
           },
         });
-      
+
         return;
       }
 
@@ -262,16 +278,17 @@ export default function QRScanner() {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
               },
               body: JSON.stringify({
                 checkOutTime: now.toString(),
                 totalHours,
               }),
-            }
+            },
           );
-        
+
           const data = await response.json();
-        
+
           if (!response.ok) {
             throw new Error(data?.message || "Error en checkout");
           }
@@ -324,7 +341,10 @@ export default function QRScanner() {
     return (
       <View style={styles.center}>
         <Text>Permiso de cámara requerido</Text>
-        <TouchableOpacity onPress={requestPermission} style={styles.retryButton}>
+        <TouchableOpacity
+          onPress={requestPermission}
+          style={styles.retryButton}
+        >
           <Text style={styles.retryText}>Conceder permiso</Text>
         </TouchableOpacity>
       </View>
@@ -382,6 +402,41 @@ export default function QRScanner() {
           </Text>
         </View>
       </View>
+      {/* BOTÓN TEMPORAL PARA CERRAR LA RESERVA YA */}
+      <TouchableOpacity
+        style={{
+          backgroundColor: "#FF0000",
+          padding: 20,
+          position: "absolute",
+          top: 50,
+          alignSelf: "center",
+          borderRadius: 10,
+          zIndex: 999,
+        }}
+        onPress={async () => {
+          console.log("Forzando cierre y creando hora de entrada fantasma...");
+
+          // 1. Inventamos que la reserva empezó hace 2 horas (para que no de error de 0 horas)
+          const haceDosHoras = Date.now() - 3 * 60 * 60 * 1000;
+
+          // 2. Lo guardamos en el storage para que el código lo encuentre
+          const key = `booking_checkin_${String(bookingId || "")}`;
+          await AsyncStorage.setItem(key, haceDosHoras.toString());
+
+          // 3. Ejecutamos el escaneo simulado
+          handleScan({
+            data: JSON.stringify({
+              type: "checkout",
+              bookingId: bookingId,
+              bookingCode: bookingCode,
+            }),
+          });
+        }}
+      >
+        <Text style={{ color: "white", fontWeight: "bold" }}>
+          CERRAR RESERVA AHORA
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }

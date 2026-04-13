@@ -21,6 +21,7 @@ export class NinerasService {
         .select(
           `
           id,
+          usuario_id,
           tarifa,
           experiencia,
           verificada,
@@ -45,8 +46,30 @@ export class NinerasService {
           `Error de base de datos: ${error.message}`,
         );
       }
+      // Calcular promedio_rating para cada niñera usando la tabla resena
+      const ninerasConRating = await Promise.all(
+        data.map(async (ninera: any) => {
+          const { data: resenas, error: resError } = await client
+            .from('resena')
+            .select('puntuacion')
+            .eq('receptor_id', ninera.usuario_id);
 
-      return data ?? [];
+          const promedio_rating =
+            !resError && resenas && resenas.length > 0
+              ? parseFloat(
+                  (
+                    resenas.reduce(
+                      (acc: number, r: any) => acc + (r.puntuacion || 0),
+                      0,
+                    ) / resenas.length
+                  ).toFixed(1),
+                )
+              : 0.0;
+
+          return { ...ninera, promedio_rating };
+        }),
+      );
+      return ninerasConRating;
     } catch (err) {
       console.error('Error crítico en findAll:', err);
 
@@ -69,6 +92,7 @@ export class NinerasService {
         .select(
           `
           id,
+          usuario_id,
           tarifa,
           experiencia,
           verificada,
@@ -112,7 +136,25 @@ export class NinerasService {
         throw new NotFoundException('La niñera no existe');
       }
 
-      return data;
+      const { data: resenas, error: resError } = await this.supabaseService
+        .getAdminClient()
+        .from('resena')
+        .select('puntuacion')
+        .eq('receptor_id', (data as any).usuario_id);
+
+      const promedio_rating =
+        !resError && resenas && resenas.length > 0
+          ? parseFloat(
+              (
+                resenas.reduce(
+                  (acc: number, r: any) => acc + (r.puntuacion || 0),
+                  0,
+                ) / resenas.length
+              ).toFixed(1),
+            )
+          : 0.0;
+
+      return { ...data, promedio_rating };
     } catch (err) {
       console.error('Error crítico en findOne:', err);
 
@@ -367,7 +409,7 @@ export class NinerasService {
         );
       }
 
-      for (let hora = inicio; hora <= fin; hora++) {
+      for (let hora = inicio; hora < fin; hora++) {
         const horaStr = `${hora.toString().padStart(2, '0')}:00`;
 
         const estaOcupado = (reservas ?? []).some((res) => {
@@ -378,7 +420,7 @@ export class NinerasService {
             return false;
           }
 
-          return hora >= resInicio && hora <= resFin;
+          return hora >= resInicio && hora < resFin;
         });
 
         slots.push({

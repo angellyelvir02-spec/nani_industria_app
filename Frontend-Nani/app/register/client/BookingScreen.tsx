@@ -177,7 +177,6 @@ export default function BookingScreen() {
   }, [duration, babysitter.hourlyRate]);
 
   const handleConfirmarReserva = async () => {
-    // 1. Validaciones iniciales (de ambas)
     if (selectedNinos.length === 0) {
       if (Platform.OS === "web") {
         window.alert("Por favor, selecciona al menos un niño.");
@@ -199,11 +198,20 @@ export default function BookingScreen() {
       return;
     }
 
-    // Validar que no haya huecos ocupados (de tu versión)
+    const horaFinBase = selectedEndTime || selectedStartTime;
+
     const startIdx = timeSlots.findIndex((s) => s.time === selectedStartTime);
-    const endIdx = timeSlots.findIndex((s) => s.time === selectedEndTime);
+    const endIdx = timeSlots.findIndex((s) => s.time === horaFinBase);
+    if (startIdx === -1 || endIdx === -1) {
+      Alert.alert("Error", "Horario inválido.");
+      return;
+    }
+
+    const minIdx = Math.min(startIdx, endIdx);
+    const maxIdx = Math.max(startIdx, endIdx);
+
     const hasConflict = timeSlots
-      .slice(startIdx, endIdx + 1)
+      .slice(minIdx, maxIdx + 1)
       .some((s) => s.status !== "available");
 
     if (hasConflict) {
@@ -224,13 +232,18 @@ export default function BookingScreen() {
     try {
       const token = await AsyncStorage.getItem("userToken");
 
+      const sumarUnaHora = (hora: string) => {
+        const [h, m] = hora.split(":").map(Number);
+        const nuevaHora = h + 1;
+        return `${String(nuevaHora).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      };
+
       const body = {
         ninera_id: id,
         metodo_pago_id: metodoSeleccionado,
         fecha_servicio: selectedDate,
         hora_inicio: selectedStartTime,
-        hora_fin: selectedEndTime || selectedStartTime,
-        duracion_horas: duration,
+        hora_fin: sumarUnaHora(horaFinBase),
         monto_base: pricing.subtotal,
         monto_comision: pricing.fee,
         tarifa_por_hora: babysitter.hourlyRate,
@@ -249,8 +262,6 @@ export default function BookingScreen() {
       });
 
       const result = await response.json();
-      console.log("📥 Respuesta completa del servidor:", result);
-
       if (!response.ok) {
         throw new Error(result.message || "Error en la reserva");
       }

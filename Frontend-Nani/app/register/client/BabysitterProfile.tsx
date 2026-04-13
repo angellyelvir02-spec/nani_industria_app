@@ -27,6 +27,7 @@ type Review = {
   rating: number;
   date: string;
   comment: string;
+  photo?: string;
 };
 
 type AvailabilitySlot = {
@@ -68,8 +69,7 @@ export default function BabysitterProfile() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchBabysitterDetail = async () => {
-      // Corrección: Si no hay ID, apagamos el cargando para mostrar el estado "No encontrada"
+    const fetchFullProfile = async () => {
       if (!babysitterId) {
         setLoading(false);
         return;
@@ -77,18 +77,41 @@ export default function BabysitterProfile() {
 
       try {
         setLoading(true);
-        const response = await fetch(
-          ENDPOINTS.get_detalle_ninera(babysitterId as string),
-        );
-        const data = await response.json();
 
-        if (response.ok) {
+        const [profileRes, reviewsRes] = await Promise.all([
+          fetch(ENDPOINTS.get_detalle_ninera(babysitterId as string)),
+          fetch(ENDPOINTS.get_resenas_ninera(babysitterId as string)),
+        ]);
+
+        const data = await profileRes.json();
+        const resData = await reviewsRes.json();
+
+        if (profileRes.ok) {
+          const rawReviews = Array.isArray(resData)
+            ? resData
+            : resData.data || [];
+
+          const formattedReviews = rawReviews.map((r: any) => ({
+            id: r.id,
+            name: r.autor_nombre || "Usuario de Nani",
+            rating: r.puntuacion || 0,
+            date: r.created_at
+              ? new Date(r.created_at).toLocaleDateString("es-HN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "Fecha no disp.",
+            comment: r.comentario || "Sin comentario.",
+            photo: r.autor_foto || null,
+          }));
+
           setBabysitter({
             id: data.id,
             name: `${data.persona?.nombre || "Niñera"} ${data.persona?.apellido || ""}`,
             photo: data.persona?.foto_url || "https://via.placeholder.com/300",
-            rating: 5.0,
-            reviews: 0,
+            rating: data.promedio_rating || 0.0,
+            reviews: formattedReviews.length,
             hourlyRate: data.tarifa || 0,
             experience: data.experiencia || "Sin experiencia",
             location:
@@ -106,46 +129,24 @@ export default function BabysitterProfile() {
                 available: true,
               })) || [],
             reservedDates: [],
-            reviewsList: [],
+            reviewsList: formattedReviews,
           });
         }
       } catch (error) {
+        console.error("Error fetching profile:", error);
         Alert.alert("Error", "No se pudo conectar con el servidor.");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchBabysitterDetail();
-  }, [babysitterId]); // Se ejecutará cada vez que cambie o llegue el ID
+    fetchFullProfile();
+  }, [babysitterId]);
 
-  if (loading) {
-    return (
-      <SafeAreaView style={[styles.safeArea, styles.centered]}>
-        <StatusBar barStyle="dark-content" />
-        <ActivityIndicator size="large" color="#886BC1" />
-        <Text style={styles.loadingText}>Cargando perfil de Nani...</Text>
-      </SafeAreaView>
-    );
-  }
-
-  if (!babysitter) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.notFoundContainer}>
-          <Text style={styles.notFoundTitle}>Niñera no encontrada</Text>
-          <TouchableOpacity
-            style={styles.backButtonAlone}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backButtonAloneText}>Volver</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const ratingFinal = babysitter?.rating || 0;
 
   const handleBook = () => {
+    if (!babysitter) return;
     router.push({
       pathname: "/register/client/BookingScreen",
       params: {
@@ -157,6 +158,17 @@ export default function BabysitterProfile() {
     });
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.safeArea, styles.centered]}>
+        <ActivityIndicator size="large" color="#886BC1" />
+        <Text style={styles.loadingText}>Cargando perfil...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (!babysitter) return null;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar
@@ -165,52 +177,37 @@ export default function BabysitterProfile() {
         backgroundColor="transparent"
       />
       <View style={styles.container}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Header con Imagen */}
           <View style={styles.imageHeader}>
             <Image
               source={{ uri: babysitter.photo }}
               style={styles.headerImage}
             />
-            <View style={styles.imageOverlay} />
             <TouchableOpacity
               style={styles.topLeftButton}
               onPress={() => router.back()}
             >
               <Ionicons name="arrow-back" size={22} color="#2E2E2E" />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.topRightButton}
-              onPress={() =>
-                Alert.alert("Compartir", `Perfil de ${babysitter.name}`)
-              }
-            >
-              <Feather name="share-2" size={20} color="#2E2E2E" />
-            </TouchableOpacity>
           </View>
 
+          {/* Tarjeta Principal Corregida */}
           <View style={styles.profileWrapper}>
             <View style={styles.profileCard}>
               <View style={styles.profileTopRow}>
-                <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={styles.profileName}>{babysitter.name}</Text>
+                <View style={{ flex: 1, paddingRight: 10 }}>
+                  {/* numberOfLines evita que el nombre desplace el precio */}
+                  <Text style={styles.profileName} numberOfLines={2}>
+                    {babysitter.name}
+                  </Text>
                   <View style={styles.infoRow}>
                     <FontAwesome name="star" size={14} color="#FF768A" />
-                    <Text style={styles.ratingValue}>{babysitter.rating}</Text>
+                    <Text style={styles.ratingValue}>
+                      {ratingFinal.toFixed(1)}
+                    </Text>
                     <Text style={styles.reviewsText}>
                       ({babysitter.reviews} reseñas)
-                    </Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <Ionicons
-                      name="location-outline"
-                      size={15}
-                      color="#8A8A8A"
-                    />
-                    <Text style={styles.locationValue} numberOfLines={1}>
-                      {babysitter.location}
                     </Text>
                   </View>
                 </View>
@@ -221,28 +218,10 @@ export default function BabysitterProfile() {
                   <Text style={styles.priceLabel}>por hora</Text>
                 </View>
               </View>
-
-              <View style={styles.badgesRow}>
-                {babysitter.verified && (
-                  <View style={styles.badge}>
-                    <MaterialIcons
-                      name="verified-user"
-                      size={16}
-                      color="#886BC1"
-                    />
-                    <Text style={styles.badgeText}>Verificada</Text>
-                  </View>
-                )}
-                <View style={styles.badge}>
-                  <Ionicons name="ribbon-outline" size={16} color="#886BC1" />
-                  <Text style={styles.badgeText}>
-                    {babysitter.experience} exp.
-                  </Text>
-                </View>
-              </View>
             </View>
           </View>
 
+          {/* Sobre mí */}
           <View style={styles.sectionContainer}>
             <View style={styles.sectionCard}>
               <Text style={styles.sectionTitle}>Sobre mí</Text>
@@ -250,64 +229,71 @@ export default function BabysitterProfile() {
             </View>
           </View>
 
-          {babysitter.skills.length > 0 && (
-            <View style={styles.sectionContainer}>
-              <View style={styles.sectionCard}>
-                <Text style={styles.sectionTitle}>Habilidades</Text>
-                <View style={styles.tagsContainer}>
-                  {babysitter.skills.map((skill) => (
-                    <View key={skill} style={styles.tag}>
-                      <Text style={styles.tagText}>{skill}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </View>
-          )}
-
+          {/* Disponibilidad */}
           <View style={styles.sectionContainer}>
             <View style={styles.sectionCard}>
               <Text style={styles.sectionTitle}>Disponibilidad</Text>
-              {babysitter.availability.length > 0 ? (
-                babysitter.availability.map((item, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.availabilityRow,
-                      index !== babysitter.availability.length - 1 &&
-                        styles.rowBorder,
-                    ]}
-                  >
-                    <Text style={styles.availabilityLabel}>{item.label}</Text>
-                    <Text style={styles.availabilityTime}>{item.time}</Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.emptyText}>
-                  No hay disponibilidad configurada.
-                </Text>
-              )}
+              {babysitter.availability.map((item, index) => (
+                <View key={index} style={styles.availabilityRow}>
+                  <Text style={styles.availabilityLabel}>{item.label}</Text>
+                  <Text style={styles.availabilityTime}>{item.time}</Text>
+                </View>
+              ))}
             </View>
           </View>
 
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Próximas Reservas</Text>
-              <Text style={styles.emptyText}>
-                No tienes reservas agendadas próximamente.
-              </Text>
-            </View>
-          </View>
-
+          {/* Reseñas Corregidas */}
           <View style={styles.sectionContainer}>
             <View style={styles.sectionCard}>
               <View style={styles.rowBetween}>
-                <Text style={styles.sectionTitle}>Reseñas</Text>
-                <Text style={styles.viewAllText}>Ver todas</Text>
+                <Text style={styles.sectionTitle}>Reseñas de padres</Text>
+                <View style={styles.miniRatingContainer}>
+                  <FontAwesome name="star" size={12} color="#FF768A" />
+                  <Text style={styles.miniRatingText}>
+                    {ratingFinal.toFixed(1)}
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.emptyText}>
-                Esta niñera aún no tiene reseñas. ¡Sé el primero en contratarla!
-              </Text>
+
+              {babysitter.reviewsList.map((review, index) => (
+                <View key={review.id} style={styles.reviewItem}>
+                  <View style={styles.reviewHeader}>
+                    {/* flex: 1 aquí permite que el nombre se corte si es muy largo */}
+                    <View style={styles.authorInfo}>
+                      <View style={styles.avatarPlaceholder}>
+                        {review.photo ? (
+                          <Image
+                            source={{ uri: review.photo }}
+                            style={styles.authorAvatar}
+                          />
+                        ) : (
+                          <Text style={styles.avatarText}>
+                            {review.name.charAt(0)}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.reviewAuthor} numberOfLines={1}>
+                          {review.name}
+                        </Text>
+                        <Text style={styles.reviewDate}>{review.date}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.starsRow}>
+                      {[...Array(5)].map((_, i) => (
+                        <FontAwesome
+                          key={i}
+                          name="star"
+                          size={10}
+                          color={i < review.rating ? "#FF768A" : "#E0E0E0"}
+                          style={{ marginLeft: 2 }}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                  <Text style={styles.reviewComment}>{review.comment}</Text>
+                </View>
+              ))}
             </View>
           </View>
 
@@ -315,11 +301,7 @@ export default function BabysitterProfile() {
         </ScrollView>
 
         <View style={styles.bottomAction}>
-          <TouchableOpacity
-            style={styles.bookButton}
-            onPress={handleBook}
-            activeOpacity={0.85}
-          >
+          <TouchableOpacity style={styles.bookButton} onPress={handleBook}>
             <Text style={styles.bookButtonText}>Solicitar reserva</Text>
           </TouchableOpacity>
         </View>
@@ -330,16 +312,11 @@ export default function BabysitterProfile() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#FAFAFA" },
-  centered: { justifyContent: "center", alignItems: "center" },
-  loadingText: { marginTop: 10, color: "#886BC1", fontWeight: "600" },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingText: { marginTop: 10, color: "#886BC1" },
   container: { flex: 1 },
-  scrollContent: { paddingBottom: 0 },
-  imageHeader: { height: 260, position: "relative" },
+  imageHeader: { height: 260 },
   headerImage: { width: "100%", height: "100%" },
-  imageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.2)",
-  },
   topLeftButton: {
     position: "absolute",
     top: 40,
@@ -350,17 +327,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
     justifyContent: "center",
     alignItems: "center",
-  },
-  topRightButton: {
-    position: "absolute",
-    top: 40,
-    right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FFF",
-    justifyContent: "center",
-    alignItems: "center",
+    elevation: 5,
   },
   profileWrapper: { marginTop: -30, paddingHorizontal: 16 },
   profileCard: {
@@ -368,91 +335,105 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
     elevation: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
   },
-  profileTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 15,
-  },
-  profileName: { fontSize: 24, fontWeight: "700", color: "#2E2E2E" },
+  profileTopRow: { flexDirection: "row", justifyContent: "space-between" },
+  profileName: { fontSize: 22, fontWeight: "700", color: "#2E2E2E" },
   infoRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
   ratingValue: { marginLeft: 5, fontWeight: "600" },
-  reviewsText: { marginLeft: 5, color: "#9A9A9A", fontSize: 13 },
-  locationValue: { marginLeft: 5, color: "#8A8A8A", flex: 1 },
-  priceBox: { alignItems: "flex-end" },
-  priceValue: { color: "#886BC1", fontSize: 26, fontWeight: "800" },
-  priceLabel: { color: "#8A8A8A", fontSize: 12 },
-  badgesRow: { flexDirection: "row", gap: 10, marginTop: 5 },
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F6D9F1",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  badgeText: {
-    marginLeft: 5,
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#2E2E2E",
-  },
+  reviewsText: { marginLeft: 5, color: "#9A9A9A", fontSize: 12 },
+  priceBox: { alignItems: "flex-end", minWidth: 80 },
+  priceValue: { color: "#886BC1", fontSize: 24, fontWeight: "800" },
+  priceLabel: { color: "#8A8A8A", fontSize: 11 },
   sectionContainer: { paddingHorizontal: 16, marginTop: 15 },
-  sectionCard: { backgroundColor: "#FFF", borderRadius: 20, padding: 18 },
-  sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
-  aboutText: { color: "#666", lineHeight: 20 },
-  tagsContainer: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  tag: {
-    backgroundColor: "#F6D9F1",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
+  sectionCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    padding: 18,
+    elevation: 1,
   },
-  tagText: { fontSize: 12, color: "#2E2E2E" },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#2E2E2E",
+    marginBottom: 10,
+  },
+  aboutText: { color: "#666", lineHeight: 20 },
   availabilityRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F5F5F5",
   },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
   availabilityLabel: { color: "#666" },
-  availabilityTime: { color: "#886BC1", fontWeight: "600" },
-  emptyText: { color: "#AAA", fontStyle: "italic", marginTop: 5 },
+  availabilityTime: { color: "#886BC1", fontWeight: "700" },
   rowBetween: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 15,
   },
-  viewAllText: { color: "#886BC1", fontWeight: "600", fontSize: 14 },
+  miniRatingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF0F2",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  miniRatingText: {
+    marginLeft: 4,
+    color: "#FF768A",
+    fontWeight: "800",
+    fontSize: 12,
+  },
+  reviewItem: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#F5F5F5",
+  },
+  reviewHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  authorInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    marginRight: 10,
+  },
+  avatarPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#E0DAFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 10,
+  },
+  authorAvatar: { width: "100%", height: "100%", borderRadius: 18 },
+  avatarText: { color: "#886BC1", fontWeight: "bold" },
+  reviewAuthor: { fontWeight: "700", color: "#2E2E2E" },
+  reviewDate: { fontSize: 11, color: "#AAA" },
+  starsRow: { flexDirection: "row" },
+  reviewComment: { marginTop: 8, color: "#555", fontSize: 13, paddingLeft: 46 },
   bottomAction: {
     position: "absolute",
     bottom: 0,
     width: "100%",
     backgroundColor: "#FFF",
     padding: 16,
+    paddingBottom: 30,
     borderTopWidth: 1,
-    borderTopColor: "#F0F0F0",
+    borderTopColor: "#EEE",
   },
   bookButton: {
     backgroundColor: "#FF768A",
-    borderRadius: 15,
-    paddingVertical: 15,
+    borderRadius: 18,
+    paddingVertical: 16,
     alignItems: "center",
   },
-  bookButtonText: { color: "#FFF", fontSize: 16, fontWeight: "700" },
-  notFoundContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  notFoundTitle: { fontSize: 20, fontWeight: "700", marginBottom: 20 },
-  backButtonAlone: {
-    backgroundColor: "#886BC1",
-    padding: 15,
-    borderRadius: 10,
-  },
-  backButtonAloneText: { color: "#FFF", fontWeight: "600" },
+  bookButtonText: { color: "#FFF", fontSize: 16, fontWeight: "800" },
 });

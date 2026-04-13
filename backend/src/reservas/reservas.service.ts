@@ -12,13 +12,11 @@ import { SupabaseService } from '../supabase/supabase.service';
 export class ReservasService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
-  private calcularDuracionHoras(horaInicio: string, horaFin: string): number {
-    if (!horaInicio || !horaFin) return 1;
-    const inicio = parseInt(horaInicio.split(':')[0], 10);
-    const fin = parseInt(horaFin.split(':')[0], 10);
+  calcularDuracionHoras(horaInicio: string, horaFin: string): number {
+    const [hInicio] = horaInicio.split(':').map(Number);
+    const [hFin] = horaFin.split(':').map(Number);
 
-    if (inicio === fin) return 1;
-    return Math.abs(fin - inicio) + 1;
+    return hFin - hInicio;
   }
 
   private formatDurationFromHours(hours: number): string {
@@ -123,8 +121,6 @@ export class ReservasService {
         `Error al guardar reserva: ${reservaError?.message}`,
       );
     }
-
-    const tarifaPorHora = duracion > 0 ? montoBase / duracion : 0;
 
     const { data: pagoInsertado, error: errorPago } = await admin
       .from('pago')
@@ -396,6 +392,7 @@ export class ReservasService {
         `
       id,
       codigo_reserva,
+      ninera_id,
       fecha_servicio,
       hora_inicio,
       hora_fin,
@@ -449,6 +446,7 @@ export class ReservasService {
       return {
         id: res.id,
         codigo_reserva: res.codigo_reserva,
+        ninera_id: res.ninera_id,
         babysitter: res.ninera?.persona
           ? `${res.ninera.persona.nombre} ${res.ninera.persona.apellido}`
           : 'Niñera Nani',
@@ -556,6 +554,8 @@ export class ReservasService {
       }`,
       address: direccion?.direccion_completa || 'Sin dirección',
       puntoReferencia: direccion?.punto_referencia || '',
+      latitud: direccion?.latitud ?? null,
+      longitud: direccion?.longitud ?? null,
       paymentStatus: data.estado_pago || 'pendiente',
       scheduledHours: data.duracion_horas,
       childrenArray: listaNinos,

@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  AppState,
   Image,
   Linking,
   ScrollView,
@@ -9,6 +11,8 @@ import {
   View,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ENDPOINTS } from "../../../constants/apiConfig";
 import {
   AlertCircle,
   ArrowLeft,
@@ -25,78 +29,129 @@ export default function JobTracking() {
   const {
     bookingId,
     bookingCode,
-    bookingStatus,
-    scanMode,
-    clientName,
-    clientPhoto,
-    date,
-    time,
-    duration,
-    children,
-    address,
-    payment,
-    paymentMethod,
-    childrenDetails,
-    notes,
-    latitude,
-    longitude,
-    scheduledStart,
-    scheduledEnd,
+    bookingStatus: initialBookingStatus,
+    scanMode: initialScanMode,
+    clientName: initialClientName,
+    clientPhoto: initialClientPhoto,
+    date: initialDate,
+    time: initialTime,
+    duration: initialDuration,
+    children: initialChildren,
+    address: initialAddress,
+    payment: initialPayment,
+    paymentMethod: initialPaymentMethod,
+    childrenDetails: initialChildrenDetails,
+    notes: initialNotes,
+    latitude: initialLatitude,
+    longitude: initialLongitude,
+    scheduledStart: initialScheduledStart,
+    scheduledEnd: initialScheduledEnd,
   } = useLocalSearchParams();
 
-  const normalizedStatus = String(bookingStatus || "").toLowerCase().trim();
-  const normalizedScanMode = String(scanMode || "").toLowerCase().trim();
+  const [serverBooking, setServerBooking] = useState<any>(null);
+  const [loadingServer, setLoadingServer] = useState(false);
+
+  const bookingStatus =
+    serverBooking?.status ?? String(initialBookingStatus || "");
+
+  const scanMode =
+    serverBooking != null
+      ? serverBooking.status === "en_progreso"
+        ? "checkout"
+        : "checkin"
+      : String(initialScanMode || "");
+
+  const address =
+    serverBooking?.address ?? String(initialAddress || "Sin dirección");
+  const latitude =
+    serverBooking?.latitud != null
+      ? String(serverBooking.latitud)
+      : String(initialLatitude || "");
+  const longitude =
+    serverBooking?.longitud != null
+      ? String(serverBooking.longitud)
+      : String(initialLongitude || "");
+  const checkInTime = serverBooking?.checkInReal
+    ? new Date(serverBooking.checkInReal).getTime().toString()
+    : "";
+
+  const clientName = String(initialClientName || "Cliente");
+  const clientPhoto = String(initialClientPhoto || "");
+  const date = String(initialDate || "");
+  const time = String(initialTime || "");
+  const duration = String(initialDuration || "0");
+  const children = String(initialChildren || "0");
+  const payment = String(initialPayment || "0");
+  const paymentMethod = String(initialPaymentMethod || "No especificado");
+  const childrenDetails = String(initialChildrenDetails || "");
+  const notes = String(initialNotes || "");
+  const scheduledStart = String(initialScheduledStart || "");
+  const scheduledEnd = String(initialScheduledEnd || "");
+
+  const fetchBookingFromServer = useCallback(async () => {
+    const bId = String(bookingId || "");
+    if (!bId || bId === "undefined") return;
+
+    try {
+      setLoadingServer(true);
+      const token = await AsyncStorage.getItem("userToken");
+      const response = await fetch(ENDPOINTS.get_detalle_reserva(bId), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      setServerBooking(data);
+    } catch {
+    } finally {
+      setLoadingServer(false);
+    }
+  }, [bookingId]);
+
+  useEffect(() => {
+    fetchBookingFromServer();
+    const interval = setInterval(fetchBookingFromServer, 30000);
+    return () => clearInterval(interval);
+  }, [fetchBookingFromServer]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") fetchBookingFromServer();
+    });
+    return () => sub.remove();
+  }, [fetchBookingFromServer]);
+
+  const normalizedStatus = bookingStatus.toLowerCase().trim();
+  const normalizedScanMode = scanMode.toLowerCase().trim();
 
   const openMap = () => {
-    const destination = String(address || "");
-    if (!destination) return;
-
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-      destination
-    )}`;
-    Linking.openURL(url);
+    if (latitude && longitude) {
+      const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+      Linking.openURL(url);
+    } else if (address) {
+      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+      Linking.openURL(url);
+    }
   };
 
   const getStatusText = () => {
-    if (normalizedStatus === "en_progreso") {
-      return "Servicio en progreso";
-    }
-
-    if (normalizedStatus === "confirmada") {
-      return "Pendiente de llegada";
-    }
-
-    if (normalizedStatus === "completada") {
-      return "Servicio completado";
-    }
-
+    if (normalizedStatus === "en_progreso") return "Servicio en progreso";
+    if (normalizedStatus === "confirmada") return "Pendiente de llegada";
+    if (normalizedStatus === "completada") return "Servicio completado";
     return "Seguimiento de reserva";
   };
 
-  const getActionText = () => {
-    if (normalizedScanMode === "checkout") {
-      return "Confirmar salida";
-    }
+  const getActionText = () =>
+    normalizedScanMode === "checkout"
+      ? "Confirmar salida"
+      : "Confirmar llegada";
 
-    return "Confirmar llegada";
-  };
-
-  const getQrType = () => {
-    if (normalizedScanMode === "checkout") {
-      return "checkout";
-    }
-
-    return "checkin";
-  };
+  const getQrType = () =>
+    normalizedScanMode === "checkout" ? "checkout" : "checkin";
 
   const getHourlyRate = () => {
     const numericDuration = Number(duration || 0);
     const numericPayment = Number(payment || 0);
-
-    if (!numericDuration || numericDuration <= 0) {
-      return "0";
-    }
-
+    if (!numericDuration || numericDuration <= 0) return "0";
     return (numericPayment / numericDuration).toString();
   };
 
@@ -115,12 +170,16 @@ export default function JobTracking() {
               <ArrowLeft color="white" size={22} />
             </TouchableOpacity>
 
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>Seguimiento del Trabajo</Text>
               <Text style={styles.headerSub}>
                 Reserva #{String(bookingId || "")}
               </Text>
             </View>
+
+            {loadingServer && (
+              <ActivityIndicator size="small" color="rgba(255,255,255,0.7)" />
+            )}
           </View>
 
           <View style={styles.statusCard}>
@@ -140,22 +199,18 @@ export default function JobTracking() {
           <View style={styles.clientRow}>
             <Image
               source={{
-                uri:
-                  String(clientPhoto || "") ||
-                  "https://via.placeholder.com/150",
+                uri: clientPhoto || "https://via.placeholder.com/150",
               }}
               style={styles.avatar}
             />
 
             <View style={{ flex: 1 }}>
-              <Text style={styles.clientName}>
-                {String(clientName || "Cliente")}
-              </Text>
+              <Text style={styles.clientName}>{clientName}</Text>
 
               <View style={styles.row}>
                 <Clock size={16} color="#886BC1" />
                 <Text style={styles.grayText}>
-                  {String(date || "")} {String(time || "")}
+                  {date} {time}
                 </Text>
               </View>
             </View>
@@ -164,7 +219,7 @@ export default function JobTracking() {
           <View style={styles.row}>
             <Users size={18} color="#886BC1" />
             <Text style={styles.grayText}>
-              {String(childrenDetails || `${children || 0} niños`)}
+              {childrenDetails || `${children} niños`}
             </Text>
           </View>
         </View>
@@ -174,9 +229,7 @@ export default function JobTracking() {
 
           <View style={styles.row}>
             <MapPin size={18} color="#FF768A" />
-            <Text style={styles.grayText}>
-              {String(address || "Sin dirección")}
-            </Text>
+            <Text style={styles.grayText}>{address}</Text>
           </View>
 
           <TouchableOpacity style={styles.mapButton} onPress={openMap}>
@@ -185,18 +238,15 @@ export default function JobTracking() {
           </TouchableOpacity>
         </View>
 
-        {!!notes &&
-          String(notes).trim() !== "" &&
-          String(notes) !== "Sin notas" && (
-            <View style={styles.notes}>
-              <View style={styles.row}>
-                <AlertCircle size={18} color="#FF768A" />
-                <Text style={styles.cardTitle}>Notas Importantes</Text>
-              </View>
-
-              <Text style={styles.grayText}>{String(notes)}</Text>
+        {!!notes && notes.trim() !== "" && notes !== "Sin notas" && (
+          <View style={styles.notes}>
+            <View style={styles.row}>
+              <AlertCircle size={18} color="#FF768A" />
+              <Text style={styles.cardTitle}>Notas Importantes</Text>
             </View>
-          )}
+            <Text style={styles.grayText}>{notes}</Text>
+          </View>
+        )}
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Detalles del Servicio</Text>
@@ -211,18 +261,18 @@ export default function JobTracking() {
           <View style={styles.paymentRow}>
             <Text>Horario programado</Text>
             <Text>
-              {String(scheduledStart || "")} - {String(scheduledEnd || "")}
+              {scheduledStart} - {scheduledEnd}
             </Text>
           </View>
 
           <View style={styles.paymentRow}>
             <Text>Duración estimada</Text>
-            <Text>{String(duration || 0)}h</Text>
+            <Text>{duration}h</Text>
           </View>
 
           <View style={styles.paymentRow}>
             <Text>Niños</Text>
-            <Text>{String(children || 0)}</Text>
+            <Text>{children}</Text>
           </View>
         </View>
 
@@ -231,14 +281,12 @@ export default function JobTracking() {
 
           <View style={styles.paymentRow}>
             <Text>Método de pago</Text>
-            <Text>{String(paymentMethod || "No especificado")}</Text>
+            <Text>{paymentMethod}</Text>
           </View>
 
           <View style={styles.paymentRow}>
             <Text>Total estimado</Text>
-            <Text style={styles.total}>
-              ${Number(payment || 0).toFixed(2)}
-            </Text>
+            <Text style={styles.total}>${Number(payment).toFixed(2)}</Text>
           </View>
         </View>
 
@@ -257,6 +305,7 @@ export default function JobTracking() {
                   address,
                   scheduledHours: duration,
                   hourlyRate: getHourlyRate(),
+                  checkInTime,
                   children,
                   childrenDetails,
                   latitude,

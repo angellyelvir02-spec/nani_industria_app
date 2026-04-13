@@ -143,7 +143,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           ? `${item.persona.nombre} ${item.persona.apellido}`
           : "Niñera",
         photo: item.persona?.foto_url || "https://via.placeholder.com/150",
-        rating: 5.0,
+        rating: item.promedio_rating || 0,
         hourlyRate: item.tarifa || 0,
         experience: item.experiencia || "Sin experiencia",
         location:
@@ -169,7 +169,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem("userToken");
-      
+
       // Si no hay token, al login de un solo
       if (!token) {
         router.replace("/login");
@@ -194,35 +194,35 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       if (!persona || !tieneDNI) {
         setLoading(false);
         const targetRoute = "/register/client/ClientRegistrationForm2";
-        if (Platform.OS === 'web') {
-    const confirmar = window.confirm(
-      "Perfil Incompleto: Debes subir tus documentos para ver niñeras. ¿Ir ahora?"
-    );
+        if (Platform.OS === "web") {
+          const confirmar = window.confirm(
+            "Perfil Incompleto: Debes subir tus documentos para ver niñeras. ¿Ir ahora?",
+          );
 
-    if (confirmar) {
-      // Intento 1: Expo Router
-      router.push(targetRoute as any);
-      setTimeout(() => {
-        window.location.href = targetRoute;
-      }, 100);
-    }
-  } else {
-   Alert.alert(
-      "Perfil Incompleto",
-      "Sube tu DNI para poder ver los detalles de las niñeras.",
-      [
-        {
-          text: "Ir al formulario",
-          onPress: () => router.push(targetRoute as any),
-        },
-        { text: "Más tarde", style: "cancel" }
-      ]
-    );
-  }
-  return;
-}
+          if (confirmar) {
+            // Intento 1: Expo Router
+            router.push(targetRoute as any);
+            setTimeout(() => {
+              window.location.href = targetRoute;
+            }, 100);
+          }
+        } else {
+          Alert.alert(
+            "Perfil Incompleto",
+            "Sube tu DNI para poder ver los detalles de las niñeras.",
+            [
+              {
+                text: "Ir al formulario",
+                onPress: () => router.push(targetRoute as any),
+              },
+              { text: "Más tarde", style: "cancel" },
+            ],
+          );
+        }
+        return;
+      }
 
-       /* Alert.alert(
+      /* Alert.alert(
           "Perfil Incompleto",
           "Para ver los detalles de las niñeras y garantizar la seguridad, necesitamos que termines de registrar tu identidad.",
           [
@@ -263,7 +263,10 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       }
     } catch (error) {
       console.error("Error validando perfil:", error);
-      Alert.alert("Error de conexión", "No pudimos verificar tu perfil con el servidor de Nani.");
+      Alert.alert(
+        "Error de conexión",
+        "No pudimos verificar tu perfil con el servidor de Nani.",
+      );
     } finally {
       setLoading(false);
     }
@@ -371,7 +374,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.navItem}
-            onPress={() => router.push("/register/client/chat" as any ) }
+            onPress={() => router.push("/register/client/chat" as any)}
           >
             <View style={styles.chatIconWrapper}>
               <Ionicons

@@ -93,6 +93,32 @@ export default function QRScanner() {
     await AsyncStorage.removeItem(getCheckInStorageKey());
   };
 
+  /**
+   * Recupera la hora de entrada real desde el backend (Supabase).
+   * Se usa como fallback cuando el celular fue reiniciado y se perdieron
+   * los params de navegación y el AsyncStorage local.
+   */
+  const fetchCheckInTimeFromServer = async (): Promise<string | null> => {
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+      const url = ENDPOINTS.get_detalle_reserva(bookingId as string);
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      // El backend devuelve checkInReal como ISO string (hora_entrada_real)
+      if (data?.checkInReal) {
+        return new Date(data.checkInReal).getTime().toString();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
   const isQrValidForCurrentBooking = (qrData: any) => {
     if (!qrData || typeof qrData !== "object") return false;
 
@@ -100,7 +126,6 @@ export default function QRScanner() {
       return false;
     }
 
-    // Si el QR trae bookingId, se valida contra la reserva actual
     if (
       qrData.bookingId &&
       String(qrData.bookingId) !== String(bookingId || "")
@@ -108,7 +133,6 @@ export default function QRScanner() {
       return false;
     }
 
-    // Si el QR trae codigo_reserva o bookingCode, se valida también
     if (
       qrData.codigo_reserva &&
       bookingCode &&
@@ -158,17 +182,6 @@ export default function QRScanner() {
 
         const location = await Location.getCurrentPositionAsync({});
 
-        // --- AÑADE ESTO PARA DEBUGEAR ---
-        console.log("📍 MI UBICACIÓN ACTUAL (GPS):", {
-          lat: location.coords.latitude,
-          lng: location.coords.longitude,
-        });
-        console.log("🏠 UBICACIÓN DE LA RESERVA (Destino):", {
-          lat: Number(latitude),
-          lng: Number(longitude),
-        });
-        // --------------------------------
-
         const distance = calculateDistance(
           location.coords.latitude,
           location.coords.longitude,
@@ -205,10 +218,10 @@ export default function QRScanner() {
             },
           );
 
-          const data = await response.json();
+          const responseData = await response.json();
 
           if (!response.ok) {
-            throw new Error(data?.message || "Error en check-in");
+            throw new Error(responseData?.message || "Error en check-in");
           }
         } catch (err: any) {
           setError(err?.message || "Error registrando entrada");
@@ -216,7 +229,7 @@ export default function QRScanner() {
           return;
         }
 
-        // Guardado local (fallback)
+        // Guardar en AsyncStorage como respaldo local ante cierre de app
         await saveCheckInTime(now);
 
         router.replace({
@@ -250,14 +263,25 @@ export default function QRScanner() {
       }
 
       if (type === "checkout") {
-        const storedCheckInTime = await getStoredCheckInTime();
-        const effectiveCheckInTime =
-          String(checkInTime || "").trim() !== ""
-            ? String(checkInTime)
-            : storedCheckInTime;
+        // PRIORIDAD DE RECUPERACIÓN DE HORA DE ENTRADA:
+        // 1. Param de navegación (sesión activa, flujo normal)
+        // 2. AsyncStorage local (app se cerró pero cel no se reinició)
+        // 3. Backend/Supabase (cel reiniciado — niñera o cliente)
+        let effectiveCheckInTime: string | null =
+          String(checkInTime || "").trim() !== "" ? String(checkInTime) : null;
+
+        if (!effectiveCheckInTime) {
+          effectiveCheckInTime = await getStoredCheckInTime();
+        }
+
+        if (!effectiveCheckInTime) {
+          effectiveCheckInTime = await fetchCheckInTimeFromServer();
+        }
 
         if (!effectiveCheckInTime || Number(effectiveCheckInTime) <= 0) {
-          setError("No se encontró la hora de entrada de esta sesión.");
+          setError(
+            "No se encontró la hora de entrada. Verifica tu conexión e intenta de nuevo.",
+          );
           setScanned(false);
           return;
         }
@@ -287,10 +311,10 @@ export default function QRScanner() {
             },
           );
 
-          const data = await response.json();
+          const responseData = await response.json();
 
           if (!response.ok) {
-            throw new Error(data?.message || "Error en checkout");
+            throw new Error(responseData?.message || "Error en checkout");
           }
         } catch (err: any) {
           setError(err?.message || "Error registrando salida");
@@ -402,41 +426,6 @@ export default function QRScanner() {
           </Text>
         </View>
       </View>
-      {/* BOTÓN TEMPORAL PARA CERRAR LA RESERVA YA */}
-      <TouchableOpacity
-        style={{
-          backgroundColor: "#FF0000",
-          padding: 20,
-          position: "absolute",
-          top: 50,
-          alignSelf: "center",
-          borderRadius: 10,
-          zIndex: 999,
-        }}
-        onPress={async () => {
-          console.log("Forzando cierre y creando hora de entrada fantasma...");
-
-          // 1. Inventamos que la reserva empezó hace 2 horas (para que no de error de 0 horas)
-          const haceDosHoras = Date.now() - 3 * 60 * 60 * 1000;
-
-          // 2. Lo guardamos en el storage para que el código lo encuentre
-          const key = `booking_checkin_${String(bookingId || "")}`;
-          await AsyncStorage.setItem(key, haceDosHoras.toString());
-
-          // 3. Ejecutamos el escaneo simulado
-          handleScan({
-            data: JSON.stringify({
-              type: "checkout",
-              bookingId: bookingId,
-              bookingCode: bookingCode,
-            }),
-          });
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "bold" }}>
-          CERRAR RESERVA AHORA
-        </Text>
-      </TouchableOpacity>
     </View>
   );
 }

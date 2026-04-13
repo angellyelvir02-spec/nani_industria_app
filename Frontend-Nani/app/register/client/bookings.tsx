@@ -68,6 +68,7 @@ export default function BookingsListScreen() {
       const mapped = (data || []).map((item: any) => ({
         id: item.id,
         babysitter: item.babysitter,
+        ninera_id: item.ninera_id,
         photo: item.photo,
         date: item.date,
         time: item.time,

@@ -107,11 +107,11 @@ export default function BabysitterDashboard() {
 
   const getActionLabel = (status: string) => {
     const normalizedStatus = normalizeBookingStatus(status);
-    
+
     if (normalizedStatus === "pendiente") return "Aceptar";
     if (normalizedStatus === "confirmada") return "Confirmar llegada";
     if (normalizedStatus === "en_progreso") return "Confirmar salida";
-    
+
     return "Seguimiento";
   };
 
@@ -184,7 +184,9 @@ export default function BabysitterDashboard() {
         const fecha = item.fecha_servicio || "";
         const horaInicio = item.hora_inicio || "";
         const horaFin = item.hora_fin || "";
-        const normalizedStatus = normalizeBookingStatus(item.estado || "pendiente");
+        const normalizedStatus = normalizeBookingStatus(
+          item.estado || "pendiente",
+        );
 
         const direccionObj =
           item.direccion ||
@@ -242,8 +244,8 @@ export default function BabysitterDashboard() {
 
       const activeBookings = mappedBookings.filter((booking: any) =>
         ["pendiente", "confirmada", "en_progreso"].includes(
-          normalizeBookingStatus(booking.status)
-        )
+          normalizeBookingStatus(booking.status),
+        ),
       );
 
       setPendingBookings(activeBookings);
@@ -261,7 +263,7 @@ export default function BabysitterDashboard() {
 
   const handleAvailabilityInputChange = (
     field: "dia" | "hora_inicio" | "hora_fin",
-    value: string
+    value: string,
   ) => {
     setAvailabilityForm((prev) => ({
       ...prev,
@@ -290,7 +292,7 @@ export default function BabysitterDashboard() {
           body: JSON.stringify({
             estado: "confirmada",
           }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -303,8 +305,8 @@ export default function BabysitterDashboard() {
         prev.map((booking) =>
           booking.id === bookingToAccept.id
             ? { ...booking, status: "confirmada" }
-            : booking
-        )
+            : booking,
+        ),
       );
 
       setIsAcceptModalOpen(false);
@@ -352,7 +354,10 @@ export default function BabysitterDashboard() {
     const { dia, hora_inicio, hora_fin } = availabilityForm;
 
     if (!dia || !hora_inicio || !hora_fin) {
-      Alert.alert("Campos incompletos", "Selecciona día, hora inicio y hora fin.");
+      Alert.alert(
+        "Campos incompletos",
+        "Selecciona día, hora inicio y hora fin.",
+      );
       return;
     }
 
@@ -369,7 +374,7 @@ export default function BabysitterDashboard() {
     if (hora_inicio >= hora_fin) {
       Alert.alert(
         "Horario inválido",
-        "La hora fin debe ser mayor que la hora inicio."
+        "La hora fin debe ser mayor que la hora inicio.",
       );
       return;
     }
@@ -378,7 +383,7 @@ export default function BabysitterDashboard() {
       (item) =>
         item.dia_semana === dia &&
         item.hora_inicio === hora_inicio &&
-        item.hora_fin === hora_fin
+        item.hora_fin === hora_fin,
     );
 
     if (alreadyExists) {
@@ -551,7 +556,7 @@ export default function BabysitterDashboard() {
                       style={styles.acceptBtn}
                       onPress={() => {
                         const normalizedStatus = normalizeBookingStatus(
-                          booking.status
+                          booking.status,
                         );
 
                         if (normalizedStatus === "pendiente") {
@@ -823,7 +828,8 @@ export default function BabysitterDashboard() {
                     <Text
                       style={[
                         styles.optionChipText,
-                        availabilityForm.dia === day && styles.optionChipTextActive,
+                        availabilityForm.dia === day &&
+                          styles.optionChipTextActive,
                       ]}
                     >
                       {day}
@@ -839,9 +845,12 @@ export default function BabysitterDashboard() {
                     key={`start-${hour}`}
                     style={[
                       styles.optionChip,
-                      availabilityForm.hora_inicio === hour && styles.optionChipActive,
+                      availabilityForm.hora_inicio === hour &&
+                        styles.optionChipActive,
                     ]}
-                    onPress={() => handleAvailabilityInputChange("hora_inicio", hour)}
+                    onPress={() =>
+                      handleAvailabilityInputChange("hora_inicio", hour)
+                    }
                   >
                     <Text
                       style={[
@@ -863,9 +872,12 @@ export default function BabysitterDashboard() {
                     key={`end-${hour}`}
                     style={[
                       styles.optionChip,
-                      availabilityForm.hora_fin === hour && styles.optionChipActive,
+                      availabilityForm.hora_fin === hour &&
+                        styles.optionChipActive,
                     ]}
-                    onPress={() => handleAvailabilityInputChange("hora_fin", hour)}
+                    onPress={() =>
+                      handleAvailabilityInputChange("hora_fin", hour)
+                    }
                   >
                     <Text
                       style={[
@@ -884,20 +896,26 @@ export default function BabysitterDashboard() {
                 style={styles.addAvailabilityBtn}
                 onPress={addAvailabilityItem}
               >
-                <Text style={styles.addAvailabilityBtnText}>Agregar horario</Text>
+                <Text style={styles.addAvailabilityBtnText}>
+                  Agregar horario
+                </Text>
               </TouchableOpacity>
 
               <ScrollView style={{ maxHeight: 180, marginTop: 12 }}>
                 {availabilityList.map((item) => (
                   <View key={item.id} style={styles.availabilityItem}>
                     <View>
-                      <Text style={styles.availabilityText}>{item.dia_semana}</Text>
+                      <Text style={styles.availabilityText}>
+                        {item.dia_semana}
+                      </Text>
                       <Text style={styles.availabilitySubText}>
                         {item.hora_inicio} - {item.hora_fin}
                       </Text>
                     </View>
 
-                    <TouchableOpacity onPress={() => removeAvailabilityItem(item.id)}>
+                    <TouchableOpacity
+                      onPress={() => removeAvailabilityItem(item.id)}
+                    >
                       <Text style={styles.removeText}>Quitar</Text>
                     </TouchableOpacity>
                   </View>
@@ -905,15 +923,14 @@ export default function BabysitterDashboard() {
               </ScrollView>
 
               <TouchableOpacity
-                style={[
-                  styles.okBtn,
-                  savingAvailability && { opacity: 0.7 },
-                ]}
+                style={[styles.okBtn, savingAvailability && { opacity: 0.7 }]}
                 onPress={saveAvailability}
                 disabled={savingAvailability}
               >
                 <Text style={{ color: "white" }}>
-                  {savingAvailability ? "Guardando..." : "Guardar disponibilidad"}
+                  {savingAvailability
+                    ? "Guardando..."
+                    : "Guardar disponibilidad"}
                 </Text>
               </TouchableOpacity>
             </ScrollView>

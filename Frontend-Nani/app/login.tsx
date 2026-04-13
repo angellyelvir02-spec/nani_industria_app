@@ -336,11 +336,19 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    
   },
   scroll: {
     flexGrow: 1,
     justifyContent: "center",
     paddingHorizontal: 20,
+    width: '100%',
+    ...Platform.select({
+      web: {
+        maxWidth: 450, // El tamaño ideal para un login profesional
+        alignSelf: 'center',
+      }
+    })
   },
   logoContainer: {
     alignItems: "center",
@@ -365,6 +373,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 8,
+    width: '100%',
   },
   title: {
     fontSize: 22,

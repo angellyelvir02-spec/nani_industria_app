@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -52,6 +53,10 @@ export default function BabysitterDashboard() {
   });
 
   const [availabilityList, setAvailabilityList] = useState<any[]>([]);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [bookingToReject, setBookingToReject] = useState<any>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectingBooking, setRejectingBooking] = useState(false);
 
   const stats = {
     monthEarnings: 2450,
@@ -320,6 +325,34 @@ export default function BabysitterDashboard() {
     }
   };
 
+  const handleRejectBooking = async () => {
+    if (!bookingToReject) return;
+    try {
+      setRejectingBooking(true);
+      const token = await AsyncStorage.getItem("userToken");
+      const response = await fetch(
+        ENDPOINTS.rechazar_reserva(bookingToReject.id),
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ motivo_rechazo: rejectReason.trim() || null }),
+        },
+      );
+      if (!response.ok) throw new Error("No se pudo rechazar");
+      Alert.alert("Listo", "Reserva rechazada.");
+      setIsRejectModalOpen(false);
+      setRejectReason("");
+      fetchPendingBookings();
+    } catch (error: any) {
+      Alert.alert("Error", error.message);
+    } finally {
+      setRejectingBooking(false);
+    }
+  };
+
   const openTrackingForBooking = (booking: any) => {
     const normalizedStatus = normalizeBookingStatus(booking.status);
     const scanMode = getScanMode(normalizedStatus);
@@ -552,6 +585,18 @@ export default function BabysitterDashboard() {
                   </View>
 
                   <View style={styles.buttonRow}>
+                    {normalizeBookingStatus(booking.status) === "pendiente" && (
+                      <TouchableOpacity
+                        style={styles.rejectBtn}
+                        onPress={() => {
+                          setBookingToReject(booking);
+                          setIsRejectModalOpen(true);
+                        }}
+                      >
+                        <Text style={styles.rejectText}>Rechazar</Text>
+                      </TouchableOpacity>
+                    )}
+
                     <TouchableOpacity
                       style={styles.acceptBtn}
                       onPress={() => {
@@ -791,6 +836,44 @@ export default function BabysitterDashboard() {
               >
                 <Text style={{ color: "white" }}>
                   {updatingBooking ? "Aceptando..." : "Sí, aceptar"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={isRejectModalOpen} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Rechazar reserva</Text>
+            <Text style={styles.modalText}>
+              ¿Por qué rechazas la solicitud de {bookingToReject?.clientName}?
+            </Text>
+            <TextInput
+              style={styles.reasonInput}
+              placeholder="Escribe el motivo (opcional)"
+              multiline
+              value={rejectReason}
+              onChangeText={setRejectReason}
+            />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity
+                style={styles.cancelModalBtn}
+                onPress={() => {
+                  setIsRejectModalOpen(false);
+                  setRejectReason("");
+                }}
+              >
+                <Text>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmRejectBtn}
+                onPress={handleRejectBooking}
+                disabled={rejectingBooking}
+              >
+                <Text style={{ color: "white", fontWeight: "700" }}>
+                  {rejectingBooking ? "Rechazando..." : "Confirmar rechazo"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1228,5 +1311,37 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     color: "#444",
     fontWeight: "600",
+  },
+  rejectBtn: {
+    backgroundColor: "#FEE2E2",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  rejectText: { color: "#DC2626", fontWeight: "700", fontSize: 13 },
+  reasonInput: {
+    width: "100%",
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    padding: 12,
+    height: 90,
+    textAlignVertical: "top",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginVertical: 12,
+  },
+  confirmRejectBtn: {
+    flex: 2,
+    backgroundColor: "#DC2626",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  cancelModalBtn: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
   },
 });

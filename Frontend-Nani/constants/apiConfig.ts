@@ -53,7 +53,13 @@ export const ENDPOINTS = {
   update_estado_reserva: (reservaId: string | number) =>
     buildUrl(`/reservas/${reservaId}`),
 
+  rechazar_reserva: (reservaId: string | number) =>
+    buildUrl(`/reservas/${reservaId}/rechazar`),
+
   get_resenas_ninera: (id: string) => `${API_URL}/nineras/${id}/resenas`,
 
   crear_resena: `${API_URL}/reservas/calificar`,
+
+  cancelar_reserva: (reservaId: string | number) =>
+    buildUrl(`/reservas/${reservaId}/cancelar`),
 };

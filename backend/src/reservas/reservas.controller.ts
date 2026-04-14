@@ -126,4 +126,31 @@ export class ReservasController {
 
     return this.reservasService.crearResena(resenaDto, authUserIdFromToken);
   }
+
+  @UseGuards(SupabaseGuard)
+  @Patch(':id/rechazar')
+  async rechazar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { motivo_rechazo?: string },
+  ) {
+    return this.reservasService.update(id, {
+      estado: 'rechazada',
+      motivo_rechazo: body.motivo_rechazo || null,
+    } as any);
+  }
+  @UseGuards(SupabaseGuard)
+  @Patch(':id/cancelar')
+  async cancelar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { motivo_cancelacion?: string },
+    @Req() req: any,
+  ) {
+    const authUserId = req.user?.id || req.user?.sub;
+    if (!authUserId) throw new BadRequestException('Usuario no identificado');
+    return this.reservasService.cancelarReserva(
+      id,
+      body.motivo_cancelacion || '',
+      authUserId,
+    );
+  }
 }

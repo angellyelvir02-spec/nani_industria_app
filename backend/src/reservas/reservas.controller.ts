@@ -14,6 +14,8 @@ import {
 import { ReservasService } from './reservas.service';
 import { CreateReservaDto } from './dto/create-reserva.dto';
 import { UpdateReservaDto } from './dto/update-reserva.dto';
+import { CheckinDto } from './dto/chekin.dto';
+import { CheckoutDto } from './dto/checkout.dto';
 import { SupabaseGuard } from '../auth/supabase.guard';
 
 @Controller('reservas')
@@ -48,33 +50,33 @@ export class ReservasController {
   }
 
   @Post(':id/checkin')
+  @UseGuards(SupabaseGuard)
   async checkin(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body()
-    body: {
-      qrCode?: string;
-      checkInTime?: string | number;
-    },
+    @Param('id')
+    id: string,
+    @Body() body: CheckinDto,
+    @Req() req: any,
   ) {
-    return this.reservasService.procesarCheckin(id, body);
+    return this.reservasService.procesarCheckin(id, body, req.user.id);
   }
 
-  @UseGuards(SupabaseGuard)
   @Post(':id/checkout')
+  @UseGuards(SupabaseGuard)
   async checkout(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body()
-    body: {
-      rating?: number;
-      comments?: string;
-      checkInTime?: string | number;
-      checkOutTime?: string | number;
-      totalHours?: number;
-      totalPayment?: number;
-      qrCode?: string;
-    },
+    @Param('id') id: string,
+    @Body() body: CheckoutDto,
+    @Req() req: any,
   ) {
-    return this.reservasService.procesarCheckout(id, body);
+    return this.reservasService.procesarCheckout(id, body, req.user.id);
+  }
+
+  @Post(':id/confirmar-finalizacion')
+  @UseGuards(SupabaseGuard)
+  async confirmarFinalizacion(@Param('id') id: string, @Req() req: any) {
+    return this.reservasService.confirmarFinalizacionCliente(
+      id,
+      req.user.sub ?? req.user.id,
+    );
   }
 
   @Get('ninera/:usuarioId')

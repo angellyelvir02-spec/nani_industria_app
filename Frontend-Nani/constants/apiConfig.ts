@@ -50,6 +50,9 @@ export const ENDPOINTS = {
   procesar_checkout: (reservaId: string | number) =>
     buildUrl(`/reservas/${reservaId}/checkout`),
 
+  confirmar_finalizacion: (reservaId: string | number) =>
+    buildUrl(`/reservas/${reservaId}/confirmar-finalizacion`),
+
   update_estado_reserva: (reservaId: string | number) =>
     buildUrl(`/reservas/${reservaId}`),
 

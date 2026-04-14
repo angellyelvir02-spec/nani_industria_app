@@ -78,6 +78,16 @@ export class ReservasController {
       req.user.sub ?? req.user.id,
     );
   }
+  @Post(':id/confirmar-cobro-efectivo')
+  @UseGuards(SupabaseGuard)
+  async confirmarCobro(@Param('id') id: string, @Req() req) {
+    const authUserId = req.user.sub ?? req.user.id;
+
+    return await this.reservasService.confirmarCobroEfectivoNinera(
+      id,
+      authUserId,
+    );
+  }
 
   @Get('ninera/:usuarioId')
   async findByNinera(@Param('usuarioId', ParseUUIDPipe) usuarioId: string) {

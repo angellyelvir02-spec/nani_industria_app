@@ -1,4 +1,4 @@
-const DEV_IP = "192.168.137.1";
+const DEV_IP = "192.168.0.13";
 const PORT = "3000";
 
 export const API_URL = `http://${DEV_IP}:${PORT}`;
@@ -52,6 +52,9 @@ export const ENDPOINTS = {
 
   confirmar_finalizacion: (reservaId: string | number) =>
     buildUrl(`/reservas/${reservaId}/confirmar-finalizacion`),
+
+  confirmar_cobro_efectivo: (reservaId: string | number) =>
+    buildUrl(`/reservas/${reservaId}/confirmar-cobro-efectivo`),
 
   update_estado_reserva: (reservaId: string | number) =>
     buildUrl(`/reservas/${reservaId}`),

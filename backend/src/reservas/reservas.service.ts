@@ -331,6 +331,17 @@ export class ReservasService {
           `Estado inválido para reserva: ${patchData.estado}`,
         );
       }
+
+      if (patchData.estado === 'confirmada') {
+        patchData.estado_comprobacion = 'confirmada';
+      } else if (patchData.estado === 'rechazada') {
+        patchData.estado_comprobacion = 'rechazada';
+      } else if (
+        patchData.estado === 'cancelada' ||
+        patchData.estado === 'completada'
+      ) {
+        patchData.estado_comprobacion = null;
+      }
     }
 
     const { data, error } = await admin
@@ -525,6 +536,7 @@ export class ReservasService {
       monto_total,
       monto_comision,
       estado,
+      estado_comprobacion,
       duracion_horas,
       notas_importantes,
       metodo_pago:metodo_pago_id (nombre),
@@ -582,6 +594,10 @@ export class ReservasService {
     const metodo_pago = getFirst(data.metodo_pago);
     const pago = getFirst(data.pago);
     const seguimiento = getFirst((data as any).seguimiento_sesion);
+    const estadoDetalle =
+      data.estado === 'pendiente' && data.estado_comprobacion === 'confirmada'
+        ? 'confirmada'
+        : data.estado;
 
     return {
       id: data.id,
@@ -604,7 +620,7 @@ export class ReservasService {
       paymentStatus: data.estado_pago || 'pendiente',
       scheduledHours: data.duracion_horas,
       childrenArray: listaNinos,
-      status: data.estado,
+      status: estadoDetalle,
       checkInReal: seguimiento?.hora_entrada_real || null,
       checkOutReal: seguimiento?.hora_salida_real || null,
       tiempoTotalTrabajado: seguimiento?.tiempo_total_trabajado || null,

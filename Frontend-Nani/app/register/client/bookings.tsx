@@ -34,7 +34,8 @@ type BookingStatus =
   | "pending"
   | "completed"
   | "cancelled"
-  | "en_progreso";
+  | "en_progreso"
+  | "rejected";
 
 export default function BookingsListScreen() {
   const router = useRouter();
@@ -47,6 +48,10 @@ export default function BookingsListScreen() {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
   const [sendingReview, setSendingReview] = useState(false);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [cancelReason, setCancelReason] = useState(""); // Cambiado de 'reason' a 'cancelReason'
+  const [sendingCancel, setSendingCancel] = useState(false); // Esta te faltaba
+  const [cancelWarning, setCancelWarning] = useState<string | null>(null); //
 
   const fetchBookings = async () => {
     try {
@@ -76,8 +81,10 @@ export default function BookingsListScreen() {
         location: item.location || "Ubicación no especificada",
         status: item.status as BookingStatus,
         amount: item.amount,
-        rating: item.rating || 5.0,
+        rating: item.rating ?? 0.0,
         reviewed: item.reviewed || false,
+        motivo_rechazo: item.motivo_rechazo || null,
+        motivo_cancelacion: item.motivo_cancelacion || null,
       }));
 
       setBookings(mapped);
@@ -129,6 +136,53 @@ export default function BookingsListScreen() {
       setSendingReview(false);
     }
   };
+  const handleCancelBooking = async () => {
+    if (!cancelReason.trim() || cancelReason.trim().length < 5) {
+      Alert.alert(
+        "Atención",
+        "Por favor escribe un motivo (mínimo 5 caracteres).",
+      );
+      return;
+    }
+    try {
+      setSendingCancel(true);
+      const token = await AsyncStorage.getItem("userToken");
+      const response = await fetch(
+        ENDPOINTS.cancelar_reserva(selectedBooking.id),
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ motivo_cancelacion: cancelReason.trim() }),
+        },
+      );
+      const result = await response.json();
+      if (response.ok) {
+        if (result.advertencia) {
+          Alert.alert("Reserva cancelada", result.advertencia);
+        } else {
+          Alert.alert(
+            "Reserva cancelada",
+            "Tu reserva ha sido cancelada exitosamente.",
+          );
+        }
+        setCancelModalVisible(false);
+        setCancelReason("");
+        await fetchBookings();
+      } else {
+        Alert.alert(
+          "Error",
+          result.message || "No se pudo cancelar la reserva.",
+        );
+      }
+    } catch {
+      Alert.alert("Error", "No pudimos conectar con el servidor.");
+    } finally {
+      setSendingCancel(false);
+    }
+  };
 
   useEffect(() => {
     fetchBookings();
@@ -167,9 +221,15 @@ export default function BookingsListScreen() {
       },
       cancelled: {
         bg: "#FEF2F2",
+        color: "#eb7d7d",
+        icon: <XCircle size={12} color="#f09292" />,
+        label: "Cancelada",
+      },
+      rejected: {
+        bg: "#FFF1F0",
         color: "#DC2626",
         icon: <XCircle size={12} color="#DC2626" />,
-        label: "Cancelada",
+        label: "Rechazada",
       },
     };
     const config = badges[status] || badges.pending;
@@ -196,7 +256,11 @@ export default function BookingsListScreen() {
   });
 
   const pastBookings = bookings.filter((b) => {
-    return b.status === "completed" || b.status === "cancelled";
+    return (
+      b.status === "completed" ||
+      b.status === "cancelled" ||
+      b.status === "rejected"
+    );
   });
 
   if (loading && !refreshing) {
@@ -293,6 +357,20 @@ export default function BookingsListScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
+                {booking.status === "confirmed" && (
+                  <TouchableOpacity
+                    style={styles.cancelBookingButton}
+                    onPress={() => {
+                      setSelectedBooking(booking);
+                      setCancelModalVisible(true);
+                    }}
+                  >
+                    <XCircle size={14} color="#e67d7d" />
+                    <Text style={styles.cancelBookingText}>
+                      Cancelar reserva
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
                 {booking.status === "en_progreso" && (
                   <View style={styles.qrButtonsRow}>
@@ -362,6 +440,56 @@ export default function BookingsListScreen() {
                     </View>
                   </View>
                 </View>
+
+                {booking.status === "rejected" && (
+                  <View style={styles.rejectionNote}>
+                    <XCircle size={14} color="#DC2626" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rejectionText}>
+                        Motivo: {booking.motivo_rechazo || "No especificado"}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.rejectionText,
+                          { fontSize: 11, marginTop: 2 },
+                        ]}
+                      >
+                        Fecha: {booking.date}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+                {booking.status === "cancelled" && (
+                  <View
+                    style={[
+                      styles.rejectionNote,
+                      {
+                        backgroundColor: "#f1daf1",
+                        borderColor: "#ad1e77",
+                        borderWidth: 1,
+                      },
+                    ]}
+                  >
+                    <XCircle size={14} color="#6B7280" />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.rejectionText,
+                          { color: "#4B5563", fontWeight: "700" },
+                        ]}
+                      >
+                        Reserva Cancelada
+                      </Text>
+                      <Text
+                        style={{ color: "#6B7280", fontSize: 12, marginTop: 2 }}
+                      >
+                        Motivo:{" "}
+                        {booking.motivo_cancelacion ||
+                          "No se especificó un motivo"}
+                      </Text>
+                    </View>
+                  </View>
+                )}
                 <View style={styles.cardFooter}>
                   <Text style={styles.historyAmountText}>{booking.amount}</Text>
                   <TouchableOpacity
@@ -440,6 +568,58 @@ export default function BookingsListScreen() {
                   <ActivityIndicator color="#FFF" size="small" />
                 ) : (
                   <Text style={styles.submitButtonText}>Publicar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={cancelModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Cancelar reserva</Text>
+            <Text style={styles.modalSubtitle}>
+              Esta acción no se puede deshacer. Por favor indica el motivo.
+            </Text>
+            {cancelWarning && (
+              <View
+                style={{
+                  backgroundColor: "#FEF3C7",
+                  padding: 10,
+                  borderRadius: 8,
+                  marginBottom: 12,
+                }}
+              >
+                <Text style={{ color: "#92400E", fontSize: 12 }}>
+                  {cancelWarning}
+                </Text>
+              </View>
+            )}
+            <TextInput
+              style={styles.textInput}
+              placeholder="Motivo de cancelación..."
+              multiline
+              value={cancelReason}
+              onChangeText={setCancelReason}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setCancelModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Volver</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: "#DC2626" }]}
+                onPress={handleCancelBooking}
+                disabled={sendingCancel}
+              >
+                {sendingCancel ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.submitButtonText}>
+                    Confirmar cancelación
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -653,4 +833,50 @@ const styles = StyleSheet.create({
     backgroundColor: "#886BC1",
   },
   submitButtonText: { color: "#FFFFFF", fontWeight: "700" },
+  rejectionNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#FFF1F0",
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 8,
+    gap: 6,
+  },
+  rejectionText: {
+    color: "#DC2626",
+    fontSize: 12,
+    flex: 1,
+  },
+  cancelBookingButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    marginTop: 8,
+    backgroundColor: "#FEF2F2", // Un fondo rojo muy suave
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+    marginBottom: 10,
+  },
+  cancelBookingText: {
+    color: "#DC2626",
+    fontSize: 13,
+    fontWeight: "700",
+    marginLeft: 6,
+  },
+  warningContainer: {
+    backgroundColor: "#FEF3C7",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  warningText: {
+    color: "#92400E",
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 18,
+  },
 });

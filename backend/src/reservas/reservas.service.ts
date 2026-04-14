@@ -237,6 +237,7 @@ export class ReservasService {
         monto_total,
         estado,
         notas_importantes,
+        motivo_rechazo,
         cliente:cliente_id (
           id,
           persona:persona_id (
@@ -302,6 +303,7 @@ export class ReservasService {
       'en_progreso',
       'completada',
       'cancelada',
+      'rechazada',
     ];
 
     const patchData: any = { ...updateReservaDto };
@@ -315,6 +317,8 @@ export class ReservasService {
         patchData.estado = 'completada';
       } else if (estadoNormalizado === 'cancelado') {
         patchData.estado = 'cancelada';
+      } else if (estadoNormalizado === 'rechazado') {
+        patchData.estado = 'rechazada';
       } else {
         patchData.estado = estadoNormalizado;
       }
@@ -400,8 +404,9 @@ export class ReservasService {
       estado,
       estado_comprobacion,
       duracion_horas,
+      motivo_rechazo,
       direccion:direccion_id (direccion_completa, punto_referencia),
-      ninera:ninera_id (persona:persona_id (nombre, apellido, foto_url))
+      ninera:ninera_id (usuario_id, persona:persona_id (nombre, apellido, foto_url))
     `,
       )
       .eq('cliente_id', cliente.id)
@@ -411,20 +416,54 @@ export class ReservasService {
       throw new BadRequestException('Error al obtener reservas.');
     }
 
+    // Obtener todos los usuario_id de niñeras
+    const usuarioIds = (data || [])
+      .map((r: any) => r.ninera?.usuario_id)
+      .filter((id: string) => !!id);
+
+    const { data: resenas, error: resError } = await admin
+      .from('resena')
+      .select('receptor_id, puntuacion')
+      .in('receptor_id', usuarioIds);
+
+    const ratingsMap: Record<string, number> = {};
+
+    if (!resError && resenas) {
+      const agrupadas: Record<string, number[]> = {};
+
+      resenas.forEach((r: any) => {
+        if (!agrupadas[r.receptor_id]) {
+          agrupadas[r.receptor_id] = [];
+        }
+        agrupadas[r.receptor_id].push(r.puntuacion || 0);
+      });
+
+      Object.keys(agrupadas).forEach((userId) => {
+        const lista = agrupadas[userId];
+        const promedio =
+          lista.reduce((acc, val) => acc + val, 0) / lista.length;
+
+        ratingsMap[userId] = parseFloat(promedio.toFixed(1));
+      });
+    }
+
     return (data || []).map((res: any) => {
       let visualStatus:
         | 'confirmed'
         | 'pending'
         | 'completed'
+        | 'rejected'
         | 'cancelled'
         | 'en_progreso' = 'pending';
 
       if (res.estado === 'completada') {
         visualStatus = 'completed';
-      } else if (res.estado === 'cancelada') {
+      } else if (res.estado === 'cancelado') {
         visualStatus = 'cancelled';
       } else if (res.estado === 'en_progreso') {
         visualStatus = 'en_progreso';
+      } else if (res.estado === 'rechazada') {
+        visualStatus = 'rejected';
       } else if (
         res.estado === 'confirmada' ||
         res.estado_comprobacion === 'confirmada'
@@ -443,6 +482,8 @@ export class ReservasService {
           }`
         : 'Ubicación no especificada';
 
+      console.log('DATA RAW SUPABASE:', JSON.stringify(data, null, 2));
+
       return {
         id: res.id,
         codigo_reserva: res.codigo_reserva,
@@ -458,8 +499,11 @@ export class ReservasService {
         location: ubicacion,
         amount: `L. ${res.monto_total}`,
         status: visualStatus,
-        rating: 5.0,
+        rating: res.ninera?.usuario_id
+          ? ratingsMap[res.ninera.usuario_id] || 0.0
+          : 0.0,
         reviewed: false,
+        motivo_rechazo: res.motivo_rechazo || null,
       };
     });
   }
@@ -1009,6 +1053,103 @@ export class ReservasService {
       success: true,
       message: '¡Reseña publicada exitosamente!',
       data: nuevaResena,
+    };
+  }
+
+  async cancelarReserva(reservaId: string, motivo: string, authUserId: string) {
+    const admin = this.supabaseService.getAdminClient();
+
+    if (!motivo || motivo.trim().length < 5) {
+      throw new BadRequestException(
+        'Debes indicar un motivo de cancelación (mínimo 5 caracteres).',
+      );
+    }
+
+    const { data: reserva } = await admin
+      .from('reserva')
+      .select('id, estado, cliente_id, ninera_id')
+      .eq('id', reservaId)
+      .maybeSingle();
+
+    if (!reserva) throw new NotFoundException('Reserva no encontrada');
+
+    if (reserva.estado !== 'confirmada') {
+      throw new BadRequestException(
+        'Solo se pueden cancelar reservas que ya estén confirmadas.',
+      );
+    }
+
+    const { data: usuario } = await admin
+      .from('usuario')
+      .select('id')
+      .eq('auth_id', authUserId)
+      .maybeSingle();
+    if (!usuario) throw new BadRequestException('Usuario no encontrado');
+
+    const { data: clienteData } = await admin
+      .from('cliente')
+      .select('id, usuario_id')
+      .eq('id', reserva.cliente_id)
+      .maybeSingle();
+    const { data: nineraData } = await admin
+      .from('ninera')
+      .select('id, usuario_id')
+      .eq('id', reserva.ninera_id)
+      .maybeSingle();
+
+    const esCliente = clienteData?.usuario_id === usuario.id;
+    const esNinera = nineraData?.usuario_id === usuario.id;
+
+    if (!esCliente && !esNinera)
+      throw new BadRequestException(
+        'No tienes permiso para cancelar esta reserva.',
+      );
+
+    const canceladoPor = esCliente ? 'cliente' : 'ninera';
+
+    const { data: reservaActualizada, error } = await admin
+      .from('reserva')
+      .update({
+        estado: 'cancelada',
+        motivo_cancelacion: motivo.trim(),
+        cancelado_por: canceladoPor,
+      })
+      .eq('id', reservaId)
+      .select()
+      .single();
+
+    if (error)
+      throw new BadRequestException(`Error al cancelar: ${error.message}`);
+
+    // Contar cancelaciones para advertencia
+    let totalCancelaciones = 0;
+    if (esCliente && clienteData) {
+      const { count } = await admin
+        .from('reserva')
+        .select('id', { count: 'exact', head: true })
+        .eq('cliente_id', clienteData.id)
+        .eq('estado', 'cancelada');
+      totalCancelaciones = count || 0;
+    } else if (esNinera && nineraData) {
+      const { count } = await admin
+        .from('reserva')
+        .select('id', { count: 'exact', head: true })
+        .eq('ninera_id', nineraData.id)
+        .eq('estado', 'cancelada');
+      totalCancelaciones = count || 0;
+    }
+
+    const advertencia =
+      totalCancelaciones >= 5
+        ? `⚠️ Llevas ${totalCancelaciones} cancelaciones. A partir de 5 cancelaciones empezaremos a evaluar los motivos para garantizar la calidad del servicio.`
+        : null;
+
+    return {
+      message: 'Reserva cancelada exitosamente.',
+      reserva: reservaActualizada,
+      cancelado_por: canceladoPor,
+      total_cancelaciones: totalCancelaciones,
+      advertencia,
     };
   }
 }

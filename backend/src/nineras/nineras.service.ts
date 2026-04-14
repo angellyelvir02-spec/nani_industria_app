@@ -383,10 +383,11 @@ export class NinerasService {
 
       const { data: reservas, error: reservasError } = await client
         .from('reserva')
-        .select('hora_inicio, hora_fin')
+        .select('hora_inicio, hora_fin, estado')
         .eq('ninera_id', nineraId)
         .eq('fecha_servicio', fecha)
-        .neq('estado', 'cancelado');
+        .neq('estado', 'cancelado')
+        .neq('estado', 'rechazada');
 
       if (reservasError) {
         console.error(
@@ -398,7 +399,10 @@ export class NinerasService {
         );
       }
 
-      const slots: { time: string; status: 'occupied' | 'available' }[] = [];
+      const slots: {
+        time: string;
+        status: 'occupied' | 'available' | 'pending';
+      }[] = [];
 
       const inicio = parseInt(horarioBase.hora_inicio.split(':')[0], 10);
       const fin = parseInt(horarioBase.hora_fin.split(':')[0], 10);
@@ -412,21 +416,28 @@ export class NinerasService {
       for (let hora = inicio; hora < fin; hora++) {
         const horaStr = `${hora.toString().padStart(2, '0')}:00`;
 
-        const estaOcupado = (reservas ?? []).some((res) => {
+        const tieneConfirmada = (reservas ?? []).some((res) => {
+          if (res.estado !== 'confirmada' && res.estado !== 'en_progreso')
+            return false;
           const resInicio = parseInt(res.hora_inicio.split(':')[0], 10);
           const resFin = parseInt(res.hora_fin.split(':')[0], 10);
-
-          if (Number.isNaN(resInicio) || Number.isNaN(resFin)) {
-            return false;
-          }
-
           return hora >= resInicio && hora < resFin;
         });
 
-        slots.push({
-          time: horaStr,
-          status: estaOcupado ? 'occupied' : 'available',
-        });
+        const tienePendiente =
+          !tieneConfirmada &&
+          (reservas ?? []).some((res) => {
+            if (res.estado !== 'pendiente') return false;
+            const resInicio = parseInt(res.hora_inicio.split(':')[0], 10);
+            const resFin = parseInt(res.hora_fin.split(':')[0], 10);
+            return hora >= resInicio && hora < resFin;
+          });
+
+        let status: 'occupied' | 'available' | 'pending' = 'available';
+        if (tieneConfirmada) status = 'occupied';
+        else if (tienePendiente) status = 'pending';
+
+        slots.push({ time: horaStr, status });
       }
 
       return slots;

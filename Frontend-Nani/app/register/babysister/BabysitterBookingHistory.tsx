@@ -18,7 +18,13 @@ interface Props {
   onBack: () => void;
 }
 
-type BookingStatus = "all" | "pending" | "confirmed" | "in_progress" | "completed";
+type BookingStatus =
+  | "all"
+  | "pending"
+  | "confirmed"
+  | "in_progress"
+  | "completed"
+  | "rejected";
 
 export default function BabysitterBookingHistory({ onBack }: Props) {
   const [filter, setFilter] = useState<BookingStatus>("all");
@@ -27,12 +33,18 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
   const [loading, setLoading] = useState(true);
 
   const normalizeStatus = (
-    estado: string
+    estado: string,
   ): "pending" | "confirmed" | "in_progress" | "completed" => {
     const estadoNormalizado = (estado || "").toString().trim().toLowerCase();
 
     if (estadoNormalizado === "pendiente") return "pending";
     if (estadoNormalizado === "confirmado") return "confirmed";
+    if (
+      estadoNormalizado === "rechazada" ||
+      estadoNormalizado === "rechazado"
+    ) {
+      return "rejected";
+    }
     if (
       estadoNormalizado === "en progreso" ||
       estadoNormalizado === "en_progreso"
@@ -91,10 +103,12 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
             ? `${clientePersona?.nombre || ""} ${clientePersona?.apellido || ""}`.trim()
             : "Cliente",
           clientPhoto:
-            clientePersona?.foto_url ||
-            "https://via.placeholder.com/150",
+            clientePersona?.foto_url || "https://via.placeholder.com/150",
           date: fecha,
-          time: horaInicio && horaFin ? `${horaInicio} - ${horaFin}` : horaInicio || horaFin || "Horario no disponible",
+          time:
+            horaInicio && horaFin
+              ? `${horaInicio} - ${horaFin}`
+              : horaInicio || horaFin || "Horario no disponible",
           duration: item?.duracion_horas || 0,
           children:
             item?.cantidad_ninos ??
@@ -139,13 +153,14 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
     .reduce((sum, b) => sum + Number(b.payment || 0), 0);
 
   const completedCount = bookings.filter(
-    (b) => b.status === "completed"
+    (b) => b.status === "completed",
   ).length;
 
   const getStatusText = (status: string) => {
     if (status === "completed") return "Finalizado";
     if (status === "in_progress") return "En progreso";
     if (status === "confirmed") return "Confirmado";
+    if (status === "rejected") return "Rechazada";
     return "Pendiente";
   };
 
@@ -153,6 +168,7 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
     if (status === "completed") return styles.completed;
     if (status === "in_progress") return styles.inProgress;
     if (status === "confirmed") return styles.confirmed;
+    if (status === "rejected") return styles.rejected;
     return styles.pending;
   };
 
@@ -544,4 +560,5 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
   },
+  rejected: { color: "#DC2626", fontSize: 12, fontWeight: "600" },
 });

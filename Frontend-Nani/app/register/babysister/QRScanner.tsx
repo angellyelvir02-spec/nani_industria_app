@@ -250,7 +250,7 @@ export default function QRScanner() {
       throw new Error(responseData?.message || "Error en checkout");
 
     router.replace({
-      pathname: "./SessionSummary",
+      pathname: "./JobTracking",
       params: {
         bookingId,
         bookingCode,

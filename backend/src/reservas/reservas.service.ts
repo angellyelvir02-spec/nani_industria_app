@@ -613,7 +613,7 @@ export class ReservasService {
       cargo_tiempo_adicional: pago?.cargo_tiempo_adicional || 0,
       tip: pago?.propina || 0,
       total: data.monto_total,
-      paymentMethodName: metodo_pago?.nombre || '',
+      paymentMethod: metodo_pago?.nombre || '',
     };
   }
 
@@ -746,7 +746,6 @@ export class ReservasService {
     };
   }
 
-  // ── CONFIRMAR FINALIZACIÓN cliente────────────────────
   async confirmarFinalizacionCliente(reservaId: string, authUserId: string) {
     const admin = this.supabaseService.getAdminClient();
 
@@ -767,21 +766,22 @@ export class ReservasService {
     if (!cliente)
       throw new ForbiddenException('Perfil de cliente no encontrado.');
 
+    // 3. Obtener Reserva y Seguimiento
     const { data: reserva, error: errReserva } = await admin
       .from('reserva')
       .select(
         `
-        id,
-        estado,
-        cliente_id,
-        cliente_confirmo_finalizacion,
-        ninera_id,
-        seguimiento_sesion (
-          hora_entrada_real,
-          hora_salida_real,
-          tiempo_total_trabajado
-        )
-      `,
+      id,
+      estado,
+      cliente_id,
+      cliente_confirmo_finalizacion,
+      ninera_id,
+      seguimiento_sesion (
+        hora_entrada_real,
+        hora_salida_real,
+        tiempo_total_trabajado
+      )
+    `,
       )
       .eq('id', reservaId)
       .single();
@@ -802,47 +802,105 @@ export class ReservasService {
     ];
     if (!estadosElegibles.includes(reserva.estado)) {
       throw new BadRequestException(
-        `No se puede confirmar una reserva en estado "${reserva.estado}".`,
+        `No se puede confirmar en estado "${reserva.estado}".`,
       );
     }
 
-    if (reserva.cliente_confirmo_finalizacion) {
-      throw new BadRequestException(
-        'Esta reserva ya fue confirmada anteriormente.',
-      );
-    }
+    const { data: pago } = await admin
+      .from('pago')
+      .select('tarifa_por_hora, metodo_pago, estado_pago')
+      .eq('reserva_id', reservaId)
+      .maybeSingle();
 
     const seg: any = Array.isArray(reserva.seguimiento_sesion)
       ? reserva.seguimiento_sesion[0]
       : reserva.seguimiento_sesion;
 
-    if (seg?.hora_salida_real) {
-      const salida = new Date(seg.hora_salida_real).getTime();
-      const veinticuatroHoras = 24 * 60 * 60 * 1000;
-      if (Date.now() - salida > veinticuatroHoras) {
-        throw new BadRequestException(
-          'El plazo de 24 horas para confirmar la finalización ha expirado.',
-        );
-      }
-    }
-
-    const { data: pago } = await admin
-      .from('pago')
-      .select('tarifa_por_hora')
-      .eq('reserva_id', reservaId)
-      .maybeSingle();
-
     const tarifaPorHora = parseFloat(pago?.tarifa_por_hora ?? '0');
     const horasTrabajadas = parseFloat(seg?.tiempo_total_trabajado ?? '0');
     const totalCalculado = +(horasTrabajadas * tarifaPorHora).toFixed(2);
 
+    const esTarjeta = pago?.metodo_pago === 'Tarjeta de Crédito/Débito';
+
+    const updateReserva: any = {
+      estado: 'completada',
+      cliente_confirmo_finalizacion: true,
+      fecha_confirmacion_cliente: new Date().toISOString(),
+      total_calculado: totalCalculado,
+    };
+
+    const updatePago: any = {
+      total_a_recibir: totalCalculado,
+    };
+
+    if (esTarjeta) {
+      updateReserva.estado = 'completada';
+      updateReserva.estado_pago = 'completada';
+      updatePago.estado_pago = 'completado';
+    }
+
+    await admin.from('reserva').update(updateReserva).eq('id', reservaId);
+
+    if (pago) {
+      await admin.from('pago').update(updatePago).eq('reserva_id', reservaId);
+    }
+
+    return {
+      success: true,
+      message: esTarjeta
+        ? 'Finalización y pago con tarjeta confirmados.'
+        : 'Finalización confirmada. Pendiente confirmación de cobro en efectivo por la niñera.',
+      horas_trabajadas: horasTrabajadas.toFixed(2),
+      total_calculado: totalCalculado,
+      metodo_pago: pago?.metodo_pago,
+    };
+  }
+
+  async confirmarCobroEfectivoNinera(reservaId: string, authUserId: string) {
+    const admin = this.supabaseService.getAdminClient();
+
+    const { data: usuario, error: errUser } = await admin
+      .from('usuario')
+      .select('id')
+      .eq('auth_id', authUserId)
+      .single();
+
+    if (!usuario) throw new ForbiddenException('Usuario no encontrado.');
+
+    const { data: ninera } = await admin
+      .from('ninera')
+      .select('id')
+      .eq('usuario_id', usuario.id)
+      .single();
+    if (!ninera)
+      throw new ForbiddenException('Perfil de niñera no encontrado.');
+
+    const { data: reserva, error: errReserva } = await admin
+      .from('reserva')
+      .select('*')
+      .eq('id', reservaId)
+      .single();
+
+    if (errReserva || !reserva)
+      throw new NotFoundException('Reserva no encontrada.');
+    if (ninera.id !== reserva.ninera_id) {
+      throw new ForbiddenException('No tienes permiso sobre esta reserva.');
+    }
+
+    const { data: pago, error: errPago } = await admin
+      .from('pago')
+      .select('*')
+      .eq('reserva_id', reservaId)
+      .single();
+
+    if (errPago || !pago) {
+      throw new NotFoundException('Pago no encontrado.');
+    }
+
     await admin
       .from('reserva')
       .update({
-        estado: 'completada',
-        cliente_confirmo_finalizacion: true,
-        fecha_confirmacion_cliente: new Date().toISOString(),
-        total_calculado: totalCalculado,
+        estado_pago: 'completada',
       })
       .eq('id', reservaId);
 
@@ -850,7 +908,7 @@ export class ReservasService {
       await admin
         .from('pago')
         .update({
-          total_a_recibir: totalCalculado,
+          total_a_recibir: reserva.monto_total,
           estado_pago: 'completado',
         })
         .eq('reserva_id', reservaId);
@@ -858,11 +916,11 @@ export class ReservasService {
 
     return {
       success: true,
-      message: 'Finalización confirmada correctamente.',
-      horas_trabajadas: horasTrabajadas.toFixed(2),
-      total_calculado: totalCalculado,
+      message: 'Cobro en efectivo confirmado correctamente',
+      total_calculado: reserva.monto_total,
     };
   }
+
   ///////Permite al cliente crear reseñas
 
   async crearResena(resenaDto: any, authUserId: string) {

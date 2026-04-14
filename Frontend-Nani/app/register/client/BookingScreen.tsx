@@ -176,6 +176,17 @@ export default function BookingScreen() {
     return { subtotal, fee, total: subtotal + fee };
   }, [duration, babysitter.hourlyRate]);
 
+  // Helper para saber si el método seleccionado es tarjeta
+  const esTarjetaSeleccionada = useMemo(() => {
+    if (!metodoSeleccionado) return false;
+    return (
+      metodosPago
+        .find((m) => m.id === metodoSeleccionado)
+        ?.nombre.toLowerCase()
+        .includes("tarjeta") ?? false
+    );
+  }, [metodoSeleccionado, metodosPago]);
+
   const handleConfirmarReserva = async () => {
     if (selectedNinos.length === 0) {
       if (Platform.OS === "web") {
@@ -194,6 +205,18 @@ export default function BookingScreen() {
         window.alert("Debes elegir al menos una hora.");
       } else {
         Alert.alert("Selección de tiempo", "Debes elegir al menos una hora.");
+      }
+      return;
+    }
+
+    if (!metodoSeleccionado) {
+      if (Platform.OS === "web") {
+        window.alert("Por favor, selecciona un método de pago.");
+      } else {
+        Alert.alert(
+          "Método de pago",
+          "Por favor, selecciona un método de pago.",
+        );
       }
       return;
     }
@@ -266,12 +289,8 @@ export default function BookingScreen() {
         throw new Error(result.message || "Error en la reserva");
       }
 
-      const esTarjeta = metodosPago
-        .find((m) => m.id === metodoSeleccionado)
-        ?.nombre.toLowerCase()
-        .includes("tarjeta");
-
-      if (esTarjeta && result.pixelPayUrl) {
+      // Si es tarjeta y el backend devuelve una URL de pago (PixelPay), redirigir
+      if (esTarjetaSeleccionada && result.pixelPayUrl) {
         router.push({
           pathname: "/register/client/WebView",
           params: { url: result.pixelPayUrl, reservaId: result.reservaId },
@@ -292,6 +311,9 @@ export default function BookingScreen() {
               nombreNinera: babysitter.name,
               fecha: selectedDate,
               ninos: JSON.stringify(ninosDetalle),
+              metodoPago:
+                metodosPago.find((m) => m.id === metodoSeleccionado)?.nombre ||
+                "",
             },
           });
         } else {
@@ -308,6 +330,9 @@ export default function BookingScreen() {
                     nombreNinera: babysitter.name,
                     fecha: selectedDate,
                     ninos: JSON.stringify(ninosDetalle),
+                    metodoPago:
+                      metodosPago.find((m) => m.id === metodoSeleccionado)
+                        ?.nombre || "",
                   },
                 }),
             },
@@ -356,7 +381,6 @@ export default function BookingScreen() {
               source={{ uri: babysitter.photo }}
               style={styles.babysitterImage}
             />
-            {/* AGREGAMOS flex: 1 AQUÍ */}
             <View style={{ flex: 1 }}>
               <Text
                 style={styles.babysitterName}
@@ -426,6 +450,89 @@ export default function BookingScreen() {
               value={notas}
               onChangeText={setNotas}
             />
+          </View>
+
+          {/* ── MÉTODO DE PAGO — ahora siempre visible ── */}
+          <View style={styles.sectionCard}>
+            <View style={styles.paymentSectionHeader}>
+              <Ionicons name="wallet-outline" size={20} color="#886BC1" />
+              <Text style={styles.sectionTitlePlain}>Método de Pago</Text>
+            </View>
+            {isLoadingInitial ? (
+              <ActivityIndicator color="#886BC1" />
+            ) : (
+              <>
+                <View style={styles.paymentRow}>
+                  {metodosPago.map((m) => {
+                    const isSel = metodoSeleccionado === m.id;
+                    const esTarjeta = m.nombre
+                      .toLowerCase()
+                      .includes("tarjeta");
+                    return (
+                      <TouchableOpacity
+                        key={m.id}
+                        style={[
+                          styles.payMethod,
+                          isSel && styles.payMethodSelected,
+                        ]}
+                        onPress={() => setMetodoSeleccionado(m.id)}
+                      >
+                        <Ionicons
+                          name={esTarjeta ? "card" : "cash"}
+                          size={26}
+                          color={isSel ? "#FFF" : "#886BC1"}
+                        />
+                        <Text
+                          style={[
+                            styles.payText,
+                            isSel && styles.payTextSelected,
+                          ]}
+                        >
+                          {m.nombre}
+                        </Text>
+                        {isSel && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={16}
+                            color="#FFF"
+                          />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Aviso informativo según el método */}
+                {metodoSeleccionado && (
+                  <View
+                    style={[
+                      styles.paymentInfoBox,
+                      esTarjetaSeleccionada && styles.paymentInfoBoxCard,
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        esTarjetaSeleccionada
+                          ? "information-circle"
+                          : "cash-outline"
+                      }
+                      size={16}
+                      color={esTarjetaSeleccionada ? "#886BC1" : "#2E7D32"}
+                    />
+                    <Text
+                      style={[
+                        styles.paymentInfoText,
+                        esTarjetaSeleccionada && styles.paymentInfoTextCard,
+                      ]}
+                    >
+                      {esTarjetaSeleccionada
+                        ? "Al finalizar el servicio se te solicitará los datos de tu tarjeta para completar el pago."
+                        : "Al finalizar el servicio, la niñera confirmará que recibió el pago en efectivo."}
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
           </View>
 
           {/* Calendario */}
@@ -525,7 +632,7 @@ export default function BookingScreen() {
             )}
           </View>
 
-          {/* Pago */}
+          {/* Resumen de Pago */}
           {duration > 0 && (
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Resumen de Pago</Text>
@@ -544,40 +651,22 @@ export default function BookingScreen() {
                   L {pricing.total.toFixed(2)}
                 </Text>
               </View>
-
-              <Text style={[styles.sectionTitlePlain, { marginTop: 15 }]}>
-                Método de Pago
-              </Text>
-              <View style={styles.paymentRow}>
-                {metodosPago.map((m) => (
-                  <TouchableOpacity
-                    key={m.id}
-                    style={[
-                      styles.payMethod,
-                      metodoSeleccionado === m.id && styles.payMethodSelected,
-                    ]}
-                    onPress={() => setMetodoSeleccionado(m.id)}
-                  >
-                    <Ionicons
-                      name={
-                        m.nombre.toLowerCase().includes("tarjeta")
-                          ? "card"
-                          : "cash"
-                      }
-                      size={20}
-                      color={metodoSeleccionado === m.id ? "#FFF" : "#886BC1"}
-                    />
-                    <Text
-                      style={[
-                        styles.payText,
-                        metodoSeleccionado === m.id && styles.payTextSelected,
-                      ]}
-                    >
-                      {m.nombre}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {metodoSeleccionado && (
+                <View style={styles.summaryMethodRow}>
+                  <Ionicons
+                    name={esTarjetaSeleccionada ? "card" : "cash"}
+                    size={16}
+                    color="#886BC1"
+                  />
+                  <Text style={styles.summaryMethodText}>
+                    Pago con:{" "}
+                    {
+                      metodosPago.find((m) => m.id === metodoSeleccionado)
+                        ?.nombre
+                    }
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </ScrollView>
@@ -588,11 +677,15 @@ export default function BookingScreen() {
               styles.confirmButton,
               (!selectedStartTime ||
                 selectedNinos.length === 0 ||
+                !metodoSeleccionado ||
                 isConfirming) &&
                 styles.btnDisabled,
             ]}
             disabled={
-              !selectedStartTime || selectedNinos.length === 0 || isConfirming
+              !selectedStartTime ||
+              selectedNinos.length === 0 ||
+              !metodoSeleccionado ||
+              isConfirming
             }
             onPress={handleConfirmarReserva}
           >
@@ -723,19 +816,50 @@ const styles = StyleSheet.create({
   summaryDivider: { height: 1, backgroundColor: "#D1C4E9", marginVertical: 10 },
   summaryTotalLabel: { fontWeight: "700", fontSize: 16 },
   summaryTotalValue: { fontWeight: "800", fontSize: 20, color: "#886BC1" },
+  summaryMethodRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#E0D1F9",
+  },
+  summaryMethodText: { color: "#886BC1", fontWeight: "600", fontSize: 13 },
+
+  // Método de pago
+  paymentSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
   paymentRow: { flexDirection: "row", gap: 10, marginTop: 5 },
   payMethod: {
     flex: 1,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 2,
     borderColor: "#886BC1",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
   },
   payMethodSelected: { backgroundColor: "#886BC1" },
-  payText: { fontSize: 12, fontWeight: "700", color: "#886BC1" },
+  payText: { fontSize: 13, fontWeight: "700", color: "#886BC1" },
   payTextSelected: { color: "#FFF" },
+  paymentInfoBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#E8F5E9",
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+  },
+  paymentInfoBoxCard: { backgroundColor: "#F3EEFF" },
+  paymentInfoText: { flex: 1, fontSize: 12, color: "#2E7D32", lineHeight: 18 },
+  paymentInfoTextCard: { color: "#6A4C9C" },
+
   bottomBar: {
     padding: 16,
     backgroundColor: "#FFF",

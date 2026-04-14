@@ -2,10 +2,13 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ForbiddenException,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { CreateReservaDto } from './dto/create-reserva.dto';
 import { UpdateReservaDto } from './dto/update-reserva.dto';
+import { CheckinDto } from './dto/chekin.dto';
+import { CheckoutDto } from './dto/checkout.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
@@ -482,8 +485,6 @@ export class ReservasService {
           }`
         : 'Ubicación no especificada';
 
-      console.log('DATA RAW SUPABASE:', JSON.stringify(data, null, 2));
-
       return {
         id: res.id,
         codigo_reserva: res.codigo_reserva,
@@ -618,340 +619,250 @@ export class ReservasService {
 
   async procesarCheckin(
     reservaId: string,
-    body: {
-      qrCode?: string;
-      checkInTime?: string | number;
-    },
+    body: CheckinDto,
+    authUserId: string,
   ) {
     const admin = this.supabaseService.getAdminClient();
 
-    const { data: reserva, error: errorReserva } = await admin
-      .from('reserva')
-      .select('id, estado, codigo_reserva')
-      .eq('id', reservaId)
-      .maybeSingle();
+    const manual: boolean = !!(body as any).manual;
+    const motivo_manual: string = ((body as any).motivo_manual ?? '').trim();
 
-    if (errorReserva) {
-      throw new InternalServerErrorException(
-        `Error consultando reserva: ${errorReserva.message}`,
+    if (manual && motivo_manual.length < 10) {
+      throw new BadRequestException(
+        'Se requiere un motivo de al menos 10 caracteres para el check-in manual.',
       );
     }
 
-    if (!reserva) {
-      throw new NotFoundException('Reserva no encontrada');
-    }
+    const { data: reserva, error: errReserva } = await admin
+      .from('reserva')
+      .select('id, estado, ninera_id')
+      .eq('id', reservaId)
+      .single();
 
+    if (errReserva || !reserva)
+      throw new NotFoundException('Reserva no encontrada.');
     if (reserva.estado !== 'confirmada') {
       throw new BadRequestException(
-        'La reserva debe estar confirmada para registrar entrada',
+        'Solo se puede hacer check-in en reservas con estado "confirmada".',
       );
     }
 
-    const checkInIso = body?.checkInTime
-      ? new Date(Number(body.checkInTime)).toISOString()
-      : new Date().toISOString();
+    const ahora = new Date(parseInt(body.checkInTime));
 
-    const { data: seguimientoExistente, error: errorSeguimiento } = await admin
+    const { data: existing } = await admin
       .from('seguimiento_sesion')
-      .select('id, hora_entrada_real')
+      .select('id')
       .eq('reserva_id', reservaId)
       .maybeSingle();
 
-    if (errorSeguimiento) {
-      throw new InternalServerErrorException(
-        `Error consultando seguimiento: ${errorSeguimiento.message}`,
-      );
-    }
+    const seguimientoData: Record<string, any> = {
+      reserva_id: reservaId,
+      hora_entrada_real: ahora.toISOString(),
+      codigo_qr_entrada: (body as any).qrCode ?? null,
+      checkin_manual: manual,
+      motivo_manual_entrada: manual ? motivo_manual : null,
+    };
 
-    if (seguimientoExistente?.hora_entrada_real) {
-      throw new BadRequestException('La entrada ya fue registrada');
-    }
-
-    if (seguimientoExistente?.id) {
-      const { error: updateSeguimientoError } = await admin
+    if (existing?.id) {
+      await admin
         .from('seguimiento_sesion')
-        .update({
-          hora_entrada_real: checkInIso,
-          codigo_qr_entrada: body?.qrCode || null,
-        })
-        .eq('id', seguimientoExistente.id);
-
-      if (updateSeguimientoError) {
-        throw new InternalServerErrorException(
-          `Error actualizando seguimiento: ${updateSeguimientoError.message}`,
-        );
-      }
+        .update(seguimientoData)
+        .eq('id', existing.id);
     } else {
-      const { error: insertSeguimientoError } = await admin
-        .from('seguimiento_sesion')
-        .insert({
-          reserva_id: reservaId,
-          hora_entrada_real: checkInIso,
-          codigo_qr_entrada: body?.qrCode || null,
-        });
-
-      if (insertSeguimientoError) {
-        throw new InternalServerErrorException(
-          `Error creando seguimiento: ${insertSeguimientoError.message}`,
-        );
-      }
+      await admin.from('seguimiento_sesion').insert(seguimientoData);
     }
 
-    const { data: reservaActualizada, error: errorUpdateReserva } = await admin
+    await admin
       .from('reserva')
-      .update({
-        estado: 'en_progreso',
-      })
-      .eq('id', reservaId)
-      .select()
-      .single();
-
-    if (errorUpdateReserva) {
-      throw new InternalServerErrorException(
-        `Error actualizando reserva: ${errorUpdateReserva.message}`,
-      );
-    }
+      .update({ estado: 'en_progreso' })
+      .eq('id', reservaId);
 
     return {
-      message: 'Check-in registrado con éxito',
-      reserva: reservaActualizada,
-      checkInTime: checkInIso,
+      success: true,
+      message: 'Check-in registrado correctamente.',
+      manual,
     };
   }
 
   async procesarCheckout(
     reservaId: string,
-    body?: {
-      rating?: number;
-      comments?: string;
-      checkInTime?: string | number;
-      checkOutTime?: string | number;
-      totalHours?: number;
-      totalPayment?: number;
-      qrCode?: string;
-    },
+    body: CheckoutDto,
+    authUserId: string,
   ) {
     const admin = this.supabaseService.getAdminClient();
 
-    const { data: reserva, error: errorReserva } = await admin
+    const manual: boolean = !!(body as any).manual;
+    const motivo_manual: string = ((body as any).motivo_manual ?? '').trim();
+
+    if (manual && motivo_manual.length < 10) {
+      throw new BadRequestException(
+        'Se requiere un motivo de al menos 10 caracteres para el check-out manual.',
+      );
+    }
+
+    const { data: seguimiento, error: errSeg } = await admin
+      .from('seguimiento_sesion')
+      .select('id, hora_entrada_real')
+      .eq('reserva_id', reservaId)
+      .maybeSingle();
+
+    if (errSeg || !seguimiento) {
+      throw new NotFoundException(
+        'No se encontró el registro de entrada para esta reserva.',
+      );
+    }
+
+    const entrada = new Date(seguimiento.hora_entrada_real).getTime();
+    const salida = new Date(parseInt(body.checkOutTime)).getTime();
+
+    if (salida <= entrada) {
+      throw new BadRequestException(
+        'La hora de salida no puede ser anterior o igual a la de entrada.',
+      );
+    }
+
+    const totalHorasReales = (salida - entrada) / 1000 / 3600;
+
+    await admin
+      .from('seguimiento_sesion')
+      .update({
+        hora_salida_real: new Date(salida).toISOString(),
+        tiempo_total_trabajado: totalHorasReales.toFixed(4),
+        checkout_manual: manual,
+        motivo_manual_salida: manual ? motivo_manual : null,
+      })
+      .eq('id', seguimiento.id);
+
+    await admin
+      .from('reserva')
+      .update({ estado: 'pendiente_confirmacion' })
+      .eq('id', reservaId);
+
+    return {
+      success: true,
+      message: 'Check-out registrado. Esperando confirmación del cliente.',
+      totalHoras: totalHorasReales.toFixed(4),
+      manual,
+    };
+  }
+
+  // ── CONFIRMAR FINALIZACIÓN cliente────────────────────
+  async confirmarFinalizacionCliente(reservaId: string, authUserId: string) {
+    const admin = this.supabaseService.getAdminClient();
+
+    const { data: usuario } = await admin
+      .from('usuario')
+      .select('id')
+      .eq('auth_id', authUserId)
+      .single();
+
+    if (!usuario) throw new ForbiddenException('Usuario no encontrado.');
+
+    const { data: cliente } = await admin
+      .from('cliente')
+      .select('id')
+      .eq('usuario_id', usuario.id)
+      .single();
+
+    if (!cliente)
+      throw new ForbiddenException('Perfil de cliente no encontrado.');
+
+    const { data: reserva, error: errReserva } = await admin
       .from('reserva')
       .select(
         `
         id,
-        cliente_id,
-        ninera_id,
-        fecha_servicio,
-        hora_inicio,
-        hora_fin,
         estado,
-        monto_total,
-        estado_pago,
-        pago (
-          id,
-          tarifa_por_hora,
-          servicio_base,
-          propina,
-          cargo_tiempo_adicional,
-          total_a_recibir,
-          estado_pago
-        ),
+        cliente_id,
+        cliente_confirmo_finalizacion,
+        ninera_id,
         seguimiento_sesion (
-          id,
           hora_entrada_real,
-          hora_salida_real
+          hora_salida_real,
+          tiempo_total_trabajado
         )
       `,
       )
       .eq('id', reservaId)
+      .single();
+
+    if (errReserva || !reserva)
+      throw new NotFoundException('Reserva no encontrada.');
+
+    if (cliente.id !== reserva.cliente_id) {
+      throw new ForbiddenException(
+        'No tienes permiso para confirmar esta reserva.',
+      );
+    }
+
+    const estadosElegibles = [
+      'pendiente_confirmacion',
+      'completada',
+      'en_progreso',
+    ];
+    if (!estadosElegibles.includes(reserva.estado)) {
+      throw new BadRequestException(
+        `No se puede confirmar una reserva en estado "${reserva.estado}".`,
+      );
+    }
+
+    if (reserva.cliente_confirmo_finalizacion) {
+      throw new BadRequestException(
+        'Esta reserva ya fue confirmada anteriormente.',
+      );
+    }
+
+    const seg: any = Array.isArray(reserva.seguimiento_sesion)
+      ? reserva.seguimiento_sesion[0]
+      : reserva.seguimiento_sesion;
+
+    if (seg?.hora_salida_real) {
+      const salida = new Date(seg.hora_salida_real).getTime();
+      const veinticuatroHoras = 24 * 60 * 60 * 1000;
+      if (Date.now() - salida > veinticuatroHoras) {
+        throw new BadRequestException(
+          'El plazo de 24 horas para confirmar la finalización ha expirado.',
+        );
+      }
+    }
+
+    const { data: pago } = await admin
+      .from('pago')
+      .select('tarifa_por_hora')
+      .eq('reserva_id', reservaId)
       .maybeSingle();
 
-    if (errorReserva) {
-      throw new InternalServerErrorException(
-        `Error consultando reserva: ${errorReserva.message}`,
-      );
-    }
+    const tarifaPorHora = parseFloat(pago?.tarifa_por_hora ?? '0');
+    const horasTrabajadas = parseFloat(seg?.tiempo_total_trabajado ?? '0');
+    const totalCalculado = +(horasTrabajadas * tarifaPorHora).toFixed(2);
 
-    if (!reserva) {
-      throw new NotFoundException('La reserva no existe');
-    }
-
-    if (reserva.estado !== 'en_progreso') {
-      throw new BadRequestException(
-        'La reserva debe estar en progreso para registrar salida',
-      );
-    }
-
-    const pago = Array.isArray((reserva as any).pago)
-      ? (reserva as any).pago[0]
-      : (reserva as any).pago;
-
-    if (!pago) {
-      throw new BadRequestException(
-        'No se encontró información de pago para esta reserva',
-      );
-    }
-
-    const seguimiento = Array.isArray((reserva as any).seguimiento_sesion)
-      ? (reserva as any).seguimiento_sesion[0]
-      : (reserva as any).seguimiento_sesion;
-
-    const checkInIso = body?.checkInTime
-      ? new Date(Number(body.checkInTime)).toISOString()
-      : seguimiento?.hora_entrada_real;
-
-    if (!checkInIso) {
-      throw new BadRequestException(
-        'No se encontró la hora de entrada para esta sesión',
-      );
-    }
-
-    const checkOutIso = body?.checkOutTime
-      ? new Date(Number(body.checkOutTime)).toISOString()
-      : new Date().toISOString();
-
-    const workedHours =
-      body?.totalHours !== undefined &&
-      body?.totalHours !== null &&
-      Number.isFinite(Number(body.totalHours))
-        ? Number(body.totalHours)
-        : Math.max(
-            0,
-            (new Date(checkOutIso).getTime() - new Date(checkInIso).getTime()) /
-              3600000,
-          );
-
-    if (!Number.isFinite(workedHours) || workedHours < 0) {
-      throw new BadRequestException('El total de horas trabajado es inválido');
-    }
-
-    const tarifaPorHora = Number(pago.tarifa_por_hora) || 0;
-    const propina = Number(pago.propina) || 0;
-    const servicioBase = Number(pago.servicio_base) || 0;
-    const horasProgramadas = Number((pago as any).hora_programada || 0);
-
-    const overtimeHours = Math.max(0, workedHours - horasProgramadas);
-    const cargoTiempoAdicional = overtimeHours * tarifaPorHora;
-
-    const totalFinal =
-      body?.totalPayment !== undefined &&
-      body?.totalPayment !== null &&
-      Number.isFinite(Number(body.totalPayment))
-        ? Number(body.totalPayment)
-        : servicioBase + cargoTiempoAdicional + propina;
-
-    const nuevoEstadoPago =
-      cargoTiempoAdicional > 0 ? 'ajuste_pendiente' : 'completado';
-
-    if (seguimiento?.id) {
-      const { error: updateSeguimientoError } = await admin
-        .from('seguimiento_sesion')
-        .update({
-          hora_entrada_real: checkInIso,
-          hora_salida_real: checkOutIso,
-          tiempo_total_trabajado: this.formatDurationFromHours(workedHours),
-          codigo_qr_salida: body?.qrCode || null,
-        })
-        .eq('id', seguimiento.id);
-
-      if (updateSeguimientoError) {
-        throw new InternalServerErrorException(
-          `Error actualizando seguimiento: ${updateSeguimientoError.message}`,
-        );
-      }
-    } else {
-      const { error: insertSeguimientoError } = await admin
-        .from('seguimiento_sesion')
-        .insert({
-          reserva_id: reservaId,
-          hora_entrada_real: checkInIso,
-          hora_salida_real: checkOutIso,
-          tiempo_total_trabajado: this.formatDurationFromHours(workedHours),
-          codigo_qr_salida: body?.qrCode || null,
-        });
-
-      if (insertSeguimientoError) {
-        throw new InternalServerErrorException(
-          `Error creando seguimiento: ${insertSeguimientoError.message}`,
-        );
-      }
-    }
-
-    const { error: errorUpdatePago } = await admin
-      .from('pago')
-      .update({
-        cargo_tiempo_adicional: Number(cargoTiempoAdicional.toFixed(2)),
-        total_a_recibir: Number(totalFinal.toFixed(2)),
-        estado_pago: nuevoEstadoPago,
-      })
-      .eq('id', pago.id);
-
-    if (errorUpdatePago) {
-      throw new BadRequestException(
-        `Error al actualizar pago: ${errorUpdatePago.message}`,
-      );
-    }
-
-    const { data: reservaFinalizada, error: errorUpdateReserva } = await admin
+    await admin
       .from('reserva')
       .update({
         estado: 'completada',
-        estado_pago: nuevoEstadoPago,
-        monto_total: Number(totalFinal.toFixed(2)),
+        cliente_confirmo_finalizacion: true,
+        fecha_confirmacion_cliente: new Date().toISOString(),
+        total_calculado: totalCalculado,
       })
-      .eq('id', reservaId)
-      .select()
-      .single();
+      .eq('id', reservaId);
 
-    if (errorUpdateReserva) {
-      throw new BadRequestException(
-        `Error al finalizar reserva: ${errorUpdateReserva.message}`,
-      );
-    }
-
-    if (
-      body?.rating &&
-      Number(body.rating) >= 1 &&
-      Number(body.rating) <= 5 &&
-      reserva.cliente_id &&
-      reserva.ninera_id
-    ) {
-      const { data: nineraData } = await admin
-        .from('ninera')
-        .select('usuario_id')
-        .eq('id', reserva.ninera_id)
-        .maybeSingle();
-
-      const { data: clienteData } = await admin
-        .from('cliente')
-        .select('usuario_id')
-        .eq('id', reserva.cliente_id)
-        .maybeSingle();
-
-      if (nineraData?.usuario_id && clienteData?.usuario_id) {
-        await admin.from('resena').upsert(
-          {
-            reserva_id: reservaId,
-            autor_id: nineraData.usuario_id,
-            receptor_id: clienteData.usuario_id,
-            puntuacion: Number(body.rating),
-            comentario: body.comments || null,
-          },
-          { onConflict: 'reserva_id' },
-        );
-      }
+    if (pago) {
+      await admin
+        .from('pago')
+        .update({
+          total_a_recibir: totalCalculado,
+          estado_pago: 'completado',
+        })
+        .eq('reserva_id', reservaId);
     }
 
     return {
-      message: 'Checkout procesado con éxito',
-      reserva: reservaFinalizada,
-      checkInTime: checkInIso,
-      checkOutTime: checkOutIso,
-      workedHours: Number(workedHours.toFixed(2)),
-      cargosAdicionales: Number(cargoTiempoAdicional.toFixed(2)),
-      totalFinal: Number(totalFinal.toFixed(2)),
+      success: true,
+      message: 'Finalización confirmada correctamente.',
+      horas_trabajadas: horasTrabajadas.toFixed(2),
+      total_calculado: totalCalculado,
     };
   }
-
   ///////Permite al cliente crear reseñas
 
   async crearResena(resenaDto: any, authUserId: string) {

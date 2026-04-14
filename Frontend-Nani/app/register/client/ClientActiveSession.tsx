@@ -9,12 +9,14 @@ import {
   Alert,
   Linking,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import QRCode from "react-native-qrcode-svg";
 import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENDPOINTS } from "../../../constants/apiConfig";
 import {
   ArrowLeft,
@@ -28,6 +30,7 @@ import {
   Baby,
   Info,
   Receipt,
+  ThumbsUp,
 } from "lucide-react-native";
 
 export default function ClientJobTracking() {
@@ -38,9 +41,11 @@ export default function ClientJobTracking() {
   const [booking, setBooking] = useState<any>(null);
   const [showQR, setShowQR] = useState(false);
 
-  // Estados para el cronómetro
   const [timeLeft, setTimeLeft] = useState<string>("00:00:00");
   const [isExtraTime, setIsExtraTime] = useState(false);
+
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmingFinish, setConfirmingFinish] = useState(false);
 
   const fetchBookingDetail = async () => {
     const bId = params.bookingId as string;
@@ -95,7 +100,6 @@ export default function ClientJobTracking() {
     return () => clearInterval(timer);
   }, [booking?.status, booking?.hora_fin]);
 
-  // QR con validación de tiempo para Nanny
   const qrValue = useMemo(() => {
     if (!booking || !booking.id) return "invalid";
 
@@ -104,10 +108,8 @@ export default function ClientJobTracking() {
       `${booking.fecha_servicio}T${booking.hora_inicio}`,
     ).getTime();
 
-    // Habilitar 1 hora antes (3600000 ms)
     const UNA_HORA_EN_MS = 3600000;
 
-    // Si no ha empezado y falta más de una hora para la hora pactada
     if (
       ahora < inicioServicio - UNA_HORA_EN_MS &&
       booking.status !== "en_progreso"
@@ -125,6 +127,66 @@ export default function ClientJobTracking() {
       timestamp: Date.now(),
     });
   }, [booking?.status, booking?.fecha_servicio, booking?.hora_inicio, showQR]);
+
+  const canConfirmFinish = useMemo(() => {
+    if (!booking) return false;
+    const elegibleStatus = ["completada", "pendiente_confirmacion"];
+    if (!elegibleStatus.includes(booking.status)) return false;
+
+    if (booking.cliente_confirmo_finalizacion) return false;
+
+    if (!booking.hora_salida_real) return true;
+    const salida = new Date(booking.hora_salida_real).getTime();
+    const veinticuatroHoras = 24 * 60 * 60 * 1000;
+    return Date.now() - salida < veinticuatroHoras;
+  }, [booking]);
+
+  const alreadyConfirmed = booking?.cliente_confirmo_finalizacion === true;
+
+  const handleConfirmFinish = async () => {
+    try {
+      setConfirmingFinish(true);
+      const token = await AsyncStorage.getItem("userToken");
+      const response = await fetch(
+        ENDPOINTS.confirmar_finalizacion(booking.id),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const result = await response.json();
+      if (response.ok) {
+        setConfirmModalVisible(false);
+
+        // 1. Mostrar alerta de éxito
+        Alert.alert(
+          "¡Confirmado!",
+          "Has confirmado la finalización del servicio.",
+          [
+            {
+              text: "Ver Resumen",
+              onPress: () => {
+                router.replace({
+                  pathname: "/register/client/home",
+                  params: { bookingId: booking.id },
+                });
+              },
+            },
+          ],
+        );
+      } else {
+        Alert.alert("Error", result.message || "No se pudo confirmar.");
+      }
+    } catch {
+      Alert.alert("Error", "No pudimos conectar con el servidor.");
+    } finally {
+      setConfirmingFinish(false);
+    }
+  };
 
   if (loading && !booking) {
     return (
@@ -165,7 +227,7 @@ export default function ClientJobTracking() {
 
           <View style={styles.statusCard}>
             <View style={styles.statusIconContainer}>
-              {isCompleted ? (
+              {isCompleted || alreadyConfirmed ? (
                 <CheckCircle2 size={24} color="#FFF" />
               ) : (
                 <Timer size={24} color="#FFF" />
@@ -181,6 +243,93 @@ export default function ClientJobTracking() {
         </LinearGradient>
 
         <View style={styles.content}>
+          {/* ── BANNER CONFIRMACIÓN FINALIZACIÓN ───────────────────────── */}
+          {canConfirmFinish && (
+            <View style={styles.confirmBanner}>
+              <View style={styles.confirmBannerTop}>
+                <ThumbsUp size={22} color="#886BC1" />
+                <Text style={styles.confirmBannerTitle}>
+                  ¿El servicio finalizó correctamente?
+                </Text>
+              </View>
+              <Text style={styles.confirmBannerText}>
+                La niñera marcó el fin del servicio. Por favor confirma la
+                finalización dentro de las próximas 24 horas. Esto permite
+                calcular el total real y cerrar la reserva.
+              </Text>
+              <TouchableOpacity
+                style={styles.confirmBannerButton}
+                onPress={() => setConfirmModalVisible(true)}
+              >
+                <CheckCircle2 size={18} color="white" />
+                <Text style={styles.confirmBannerButtonText}>
+                  Confirmar finalización
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {alreadyConfirmed && (
+            <View style={styles.confirmedBadge}>
+              <CheckCircle2 size={18} color="#16A34A" />
+              <Text style={styles.confirmedBadgeText}>
+                Finalizació confirmada por ti ✓
+              </Text>
+            </View>
+          )}
+
+          {/* CÁLCULO FINAL — visible después de confirmar o al completarse */}
+          {(alreadyConfirmed || isCompleted) &&
+            booking?.tiempo_total_trabajado && (
+              <View style={styles.finalCalcCard}>
+                <Text style={styles.finalCalcTitle}>Resumen Final</Text>
+
+                <View style={styles.paymentRow}>
+                  <Text style={styles.paymentLabel}>Hora de entrada real</Text>
+                  <Text style={styles.paymentValue}>
+                    {booking.hora_entrada_real
+                      ? new Date(booking.hora_entrada_real).toLocaleTimeString(
+                          [],
+                          {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          },
+                        )
+                      : "—"}
+                  </Text>
+                </View>
+                <View style={styles.paymentRow}>
+                  <Text style={styles.paymentLabel}>Hora de salida real</Text>
+                  <Text style={styles.paymentValue}>
+                    {booking.hora_salida_real
+                      ? new Date(booking.hora_salida_real).toLocaleTimeString(
+                          [],
+                          {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          },
+                        )
+                      : "—"}
+                  </Text>
+                </View>
+                <View style={styles.paymentRow}>
+                  <Text style={styles.paymentLabel}>Horas trabajadas</Text>
+                  <Text style={styles.paymentValue}>
+                    {parseFloat(booking.tiempo_total_trabajado).toFixed(2)} h
+                  </Text>
+                </View>
+                <View style={[styles.paymentRow, styles.totalRow]}>
+                  <Text style={styles.totalLabel}>Total Final</Text>
+                  <Text style={styles.totalValue}>
+                    L.{" "}
+                    {Number(
+                      booking?.total_calculado || booking?.total || 0,
+                    ).toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
           {/* UBICACIÓN */}
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
@@ -203,76 +352,91 @@ export default function ClientJobTracking() {
           {/* CRONÓMETRO */}
           {booking?.status === "en_progreso" && (
             <View style={[styles.card, styles.timerCard]}>
-              <Text style={styles.timerLabel}>
-                {isExtraTime ? "TIEMPO EXTRA" : "TIEMPO RESTANTE"}
-              </Text>
+              <Text style={styles.timerLabel}>TIEMPO RESTANTE</Text>
               <Text
                 style={[styles.timerValue, isExtraTime && { color: "#FF768A" }]}
               >
                 {timeLeft}
               </Text>
+              {isExtraTime && (
+                <Text
+                  style={{ color: "#FF768A", fontSize: 12, fontWeight: "600" }}
+                >
+                  Tiempo extra en curso
+                </Text>
+              )}
             </View>
           )}
 
           {/* NIÑERA */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Tu Nanny</Text>
-            <View style={styles.babysitterRow}>
-              <Image
-                source={{
-                  uri:
-                    booking?.babysitterPhoto ||
-                    "https://via.placeholder.com/100",
-                }}
-                style={styles.babysitterImage}
-              />
-              <View style={styles.babysitterInfo}>
-                <Text style={styles.babysitterName}>
-                  {booking?.babysitterName}
-                </Text>
-                <View style={styles.infoRow}>
-                  <Clock size={14} color="#886BC1" />
-                  <Text style={styles.infoText}>{booking?.time}</Text>
+          {booking?.babysitter && (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Baby size={18} color="#886BC1" />
+                <Text style={styles.cardTitle}>Niñera Asignada</Text>
+              </View>
+              <View style={styles.babysitterRow}>
+                <Image
+                  source={{
+                    uri:
+                      booking.babysitter?.photo ||
+                      "https://via.placeholder.com/150",
+                  }}
+                  style={styles.babysitterImage}
+                />
+                <View style={styles.babysitterInfo}>
+                  <Text style={styles.babysitterName}>
+                    {booking.babysitter?.name}
+                  </Text>
+                  {booking.babysitter?.phone && (
+                    <View style={styles.infoRow}>
+                      <Phone size={14} color="#886BC1" />
+                      <Text style={styles.infoText}>
+                        {booking.babysitter.phone}
+                      </Text>
+                    </View>
+                  )}
                 </View>
+                {booking.babysitter?.phone && (
+                  <TouchableOpacity
+                    style={styles.miniActionBtn}
+                    onPress={() =>
+                      Linking.openURL(`tel:${booking.babysitter.phone}`)
+                    }
+                  >
+                    <Phone size={18} color="#886BC1" />
+                  </TouchableOpacity>
+                )}
               </View>
-              <TouchableOpacity
-                style={styles.miniActionBtn}
-                onPress={() =>
-                  Linking.openURL(`tel:${booking?.babysitterPhone}`)
-                }
-              >
-                <Phone size={18} color="#886BC1" />
-              </TouchableOpacity>
             </View>
-          </View>
+          )}
 
-          {/* NIÑOS */}
-          <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Baby size={18} color="#886BC1" />
-              <Text style={styles.cardTitle}>Niños a Cuidar</Text>
-            </View>
-            {booking?.childrenArray?.map((nino: any, index: number) => (
-              <View key={index} style={styles.childItem}>
-                <Text style={styles.childName}>
-                  {nino.nombre} •{" "}
-                  <Text style={styles.childAge}>{nino.edad} años</Text>
-                </Text>
-                {nino.nota ? (
-                  <Text style={styles.childNote}>Nota: {nino.nota}</Text>
-                ) : null}
-              </View>
-            ))}
-          </View>
-
-          {/* RESUMEN FINANCIERO */}
+          {/* PAGO */}
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
               <Receipt size={18} color="#886BC1" />
-              <Text style={styles.cardTitle}>Resumen de Pago</Text>
+              <Text style={styles.cardTitle}>Detalles de Pago</Text>
             </View>
             <View style={styles.paymentRow}>
-              <Text style={styles.paymentLabel}>Servicio Base</Text>
+              <Text style={styles.paymentLabel}>Método</Text>
+              <Text style={styles.paymentValue}>
+                {booking?.paymentMethod || "No especificado"}
+              </Text>
+            </View>
+            <View style={styles.paymentRow}>
+              <Text style={styles.paymentLabel}>Tarifa por hora</Text>
+              <Text style={styles.paymentValue}>
+                L. {Number(booking?.hourlyRate || 0).toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.paymentRow}>
+              <Text style={styles.paymentLabel}>Horas programadas</Text>
+              <Text style={styles.paymentValue}>
+                {booking?.duracion_horas || 0} h
+              </Text>
+            </View>
+            <View style={styles.paymentRow}>
+              <Text style={styles.paymentLabel}>Subtotal base</Text>
               <Text style={styles.paymentValue}>
                 L. {Number(booking?.baseAmount || 0).toFixed(2)}
               </Text>
@@ -312,8 +476,8 @@ export default function ClientJobTracking() {
             </View>
           </View>
 
-          {/* QR SECTION CON LÓGICA DE TIEMPO */}
-          {!isCompleted && (
+          {/* QR — solo cuando el servicio no ha finalizado */}
+          {!isCompleted && !canConfirmFinish && (
             <View style={styles.qrContainer}>
               {canShowQR ? (
                 !showQR ? (
@@ -329,7 +493,6 @@ export default function ClientJobTracking() {
                       const inicio = new Date(
                         `${booking.fecha_servicio}T${booking.hora_inicio}`,
                       ).getTime();
-
                       const UNA_HORA_EN_MS = 3600000;
 
                       if (
@@ -338,7 +501,7 @@ export default function ClientJobTracking() {
                       ) {
                         Alert.alert(
                           "Aún es muy pronto",
-                          `Podrás generar el QR 1 hora antes del servicio (a partir de las ${booking.hora_inicio.split(":")[0] - 1 || 0}: ${booking.hora_inicio.split(":")[1]}).`,
+                          `Podrás generar el QR 1 hora antes del servicio.`,
                         );
                       } else {
                         setShowQR(true);
@@ -410,6 +573,65 @@ export default function ClientJobTracking() {
           )}
         </View>
       </ScrollView>
+
+      {/* ── MODAL CONFIRMACIÓN FINALIZACIÓN ──────────────────────────────── */}
+      <Modal
+        visible={confirmModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setConfirmModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalIconContainer}>
+              <CheckCircle2 size={44} color="#886BC1" />
+            </View>
+
+            <Text style={styles.modalTitle}>Confirmar finalización</Text>
+            <Text style={styles.modalText}>
+              Al confirmar, se cerrará la reserva y se calculará el costo final
+              basado en las horas reales trabajadas por la niñera. Esta acción
+              no se puede deshacer.
+            </Text>
+
+            {booking?.tiempo_total_trabajado && (
+              <View style={styles.modalSummaryBox}>
+                <Text style={styles.modalSummaryLabel}>
+                  Horas registradas por la niñera:
+                </Text>
+                <Text style={styles.modalSummaryValue}>
+                  {parseFloat(booking.tiempo_total_trabajado).toFixed(2)} h
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setConfirmModalVisible(false)}
+                disabled={confirmingFinish}
+              >
+                <Text style={styles.cancelBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.confirmBtn,
+                  confirmingFinish && styles.disabledBtn,
+                ]}
+                onPress={handleConfirmFinish}
+                disabled={confirmingFinish}
+              >
+                {confirmingFinish ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text style={styles.confirmBtnText}>Sí, confirmar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -503,14 +725,6 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
   infoText: { fontSize: 13, color: "#666", marginLeft: 6 },
   miniActionBtn: { padding: 10, backgroundColor: "#F3E8FF", borderRadius: 12 },
-  childItem: {
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
-  },
-  childName: { fontSize: 15, fontWeight: "600", color: "#333" },
-  childAge: { fontWeight: "400", color: "#666" },
-  childNote: { fontSize: 12, color: "#888", marginTop: 2, fontStyle: "italic" },
   paymentRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -532,6 +746,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   totalValue: { fontSize: 20, fontWeight: "800", color: "#886BC1" },
+
   qrContainer: { marginTop: 10 },
   generateQRButton: {
     backgroundColor: "#FF768A",
@@ -575,4 +790,126 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "500",
   },
+
+  // ── Confirmación de finalización ──────────────────────────────────────
+  confirmBanner: {
+    backgroundColor: "#F0EBFB",
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: "#C4B5E8",
+    gap: 10,
+  },
+  confirmBannerTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  confirmBannerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#886BC1",
+    flex: 1,
+  },
+  confirmBannerText: { fontSize: 13, color: "#555", lineHeight: 20 },
+  confirmBannerButton: {
+    backgroundColor: "#886BC1",
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  confirmBannerButtonText: { color: "white", fontWeight: "700", fontSize: 14 },
+
+  confirmedBadge: {
+    backgroundColor: "#ECFDF5",
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  confirmedBadgeText: { color: "#16A34A", fontWeight: "600", fontSize: 14 },
+
+  finalCalcCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1.5,
+    borderColor: "#886BC1",
+    elevation: 2,
+    shadowColor: "#886BC1",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  finalCalcTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#886BC1",
+    marginBottom: 14,
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContainer: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 28,
+    paddingBottom: 40,
+    alignItems: "center",
+  },
+  modalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#F0EBFB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#333",
+    marginBottom: 10,
+  },
+  modalText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  modalSummaryBox: {
+    backgroundColor: "#F6F0FF",
+    borderRadius: 12,
+    padding: 14,
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalSummaryLabel: { fontSize: 13, color: "#777", marginBottom: 4 },
+  modalSummaryValue: { fontSize: 22, fontWeight: "800", color: "#886BC1" },
+  modalButtons: { flexDirection: "row", gap: 12, width: "100%" },
+  cancelBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "#EEE",
+    alignItems: "center",
+  },
+  cancelBtnText: { color: "#555", fontWeight: "600" },
+  confirmBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "#886BC1",
+    alignItems: "center",
+  },
+  confirmBtnText: { color: "white", fontWeight: "700" },
+  disabledBtn: { opacity: 0.6 },
 });

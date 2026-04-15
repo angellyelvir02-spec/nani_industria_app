@@ -10,6 +10,7 @@ import {
   SafeAreaView,
   StatusBar,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import {
@@ -168,7 +169,7 @@ export default function UserProfile({
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setShowLogoutModal(false);
 
     if (onLogout) {
@@ -176,6 +177,7 @@ export default function UserProfile({
       return;
     }
 
+    await AsyncStorage.multiRemove(["userToken", "userId"]);
     router.replace("/login");
   };
 
@@ -363,7 +365,7 @@ export default function UserProfile({
 
           <TouchableOpacity
             style={styles.navItem}
-            onPress={() => router.push("/register/client/chat")}
+            onPress={() => router.push("/register/client/ChatList")}
           >
             <Ionicons name="chatbubble-outline" size={22} color="#9CA3AF" />
             <Text style={styles.navText}>Chat</Text>

@@ -68,4 +68,12 @@ export const ENDPOINTS = {
 
   cancelar_reserva: (reservaId: string | number) =>
     buildUrl(`/reservas/${reservaId}/cancelar`),
+
+  get_chat_conversations: buildUrl("/chat/conversations"),
+
+  get_chat_with_user: (otherUserId: string) =>
+    buildUrl(`/chat/with/${otherUserId}`),
+
+  send_chat_message: (otherUserId: string) =>
+    buildUrl(`/chat/with/${otherUserId}`),
 };

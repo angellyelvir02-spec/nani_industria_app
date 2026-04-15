@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 
 import {
   Alert,
@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENDPOINTS } from "../../../constants/apiConfig";
@@ -145,7 +145,7 @@ export default function BabysitterDashboard() {
     setIsDetailsOpen(true);
   };
 
-  const fetchLoggedUser = async () => {
+  const fetchLoggedUser = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem("userToken");
 
@@ -174,9 +174,9 @@ export default function BabysitterDashboard() {
     } catch (error) {
       console.log("Error fetchLoggedUser:", error);
     }
-  };
+  }, []);
 
-  const fetchPendingBookings = async () => {
+  const fetchPendingBookings = useCallback(async () => {
     try {
       setLoadingBookings(true);
 
@@ -270,12 +270,14 @@ export default function BabysitterDashboard() {
     } finally {
       setLoadingBookings(false);
     }
-  };
-
-  useEffect(() => {
-    fetchLoggedUser();
-    fetchPendingBookings();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchLoggedUser();
+      fetchPendingBookings();
+    }, [fetchLoggedUser, fetchPendingBookings]),
+  );
 
   const handleAvailabilityInputChange = (
     field: "dia" | "hora_inicio" | "hora_fin",

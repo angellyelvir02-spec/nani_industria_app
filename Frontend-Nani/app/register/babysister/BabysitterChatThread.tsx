@@ -1,29 +1,29 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActivityIndicator,
-} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ArrowLeft,
-  Send,
-  Paperclip,
   Image as ImageIcon,
-  Smile,
-  Phone,
   MoreVertical,
+  Paperclip,
+  Phone,
+  Send,
+  Smile,
 } from "lucide-react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { ENDPOINTS } from "../../../constants/apiConfig";
 
 type Message = {
@@ -33,7 +33,7 @@ type Message = {
   createdAt: string;
 };
 
-export default function ChatScreen() {
+export default function BabysitterChatThread() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const listRef = useRef<FlatList<Message>>(null);
@@ -45,11 +45,11 @@ export default function ChatScreen() {
 
   const counterpart = useMemo(
     () => ({
-      name: String(params.babysitterName ?? "Chat"),
-      photo: String(params.babysitterPhoto ?? ""),
+      name: String(params.clientName ?? "Chat"),
+      photo: String(params.clientPhoto ?? ""),
       status: "Reserva confirmada",
     }),
-    [params.babysitterName, params.babysitterPhoto],
+    [params.clientName, params.clientPhoto],
   );
 
   const fetchConversation = useCallback(async () => {
@@ -198,7 +198,7 @@ export default function ChatScreen() {
                     <View
                       style={[
                         styles.messageBubble,
-                        isUser ? styles.userBubble : styles.babysitterBubble,
+                        isUser ? styles.userBubble : styles.clientBubble,
                       ]}
                     >
                       <Text
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  babysitterBubble: {
+  clientBubble: {
     backgroundColor: "#F6D9F1",
     borderBottomLeftRadius: 8,
   },

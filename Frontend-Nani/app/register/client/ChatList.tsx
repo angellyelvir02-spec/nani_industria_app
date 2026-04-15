@@ -1,114 +1,109 @@
-import { Feather, Ionicons } from "@expo/vector-icons"; // Cambié a Ionicons para no instalar más librerías
+import { Feather, Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
-    FlatList,
-    Image,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { ENDPOINTS } from "../../../constants/apiConfig";
 
-// --- TIPOS ---
 type ChatPreview = {
-  id: string;
+  otherUserId: string;
   name: string;
-  photo: string;
+  photo: string | null;
   lastMessage: string;
   time: string;
   unreadCount: number;
   isOnline: boolean;
+  status: string;
 };
 
 export default function ChatList() {
   const router = useRouter();
   const [searchText, setSearchText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [chats, setChats] = useState<ChatPreview[]>([]);
 
-  const [chats] = useState<ChatPreview[]>([
-    {
-      id: "1",
-      name: "Maria Rodriguez",
-      photo: "https://randomuser.me/api/portraits/women/44.jpg",
-      lastMessage: "¡Perfecto! Estaré allí a las 3:00 PM.",
-      time: "10:05 AM",
-      unreadCount: 2,
-      isOnline: true,
-    },
-    {
-      id: "2",
-      name: "Ana Martínez",
-      photo: "https://randomuser.me/api/portraits/women/65.jpg",
-      lastMessage: "Hola, ¿podrías confirmarme la dirección?",
-      time: "Ayer",
-      unreadCount: 0,
-      isOnline: false,
-    },
-  ]);
+  const fetchChats = useCallback(async () => {
+    try {
+      setLoading(true);
+      const token = await AsyncStorage.getItem("userToken");
+      const response = await fetch(ENDPOINTS.get_chat_conversations, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
 
-  const renderChatItem = ({ item }: { item: ChatPreview }) => (
-    <TouchableOpacity
-      style={styles.chatCard}
-      onPress={() =>
-        router.push({
-          pathname: "/register/client/chat",
-          params: { name: item.name, photo: item.photo },
-        })
+      if (!response.ok) {
+        setChats([]);
+        return;
       }
-    >
-      <View style={styles.avatarContainer}>
-        <Image source={{ uri: item.photo }} style={styles.avatar} />
-        {item.isOnline && <View style={styles.onlineDot} />}
-      </View>
 
-      <View style={styles.chatInfo}>
-        <View style={styles.chatHeader}>
-          <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.time}>{item.time}</Text>
-        </View>
-        
-        <View style={styles.chatFooter}>
-          <Text style={styles.lastMessage} numberOfLines={1}>
-            {item.lastMessage}
-          </Text>
-          {item.unreadCount > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>{item.unreadCount}</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
+      setChats(data || []);
+    } catch (error) {
+      console.log("Error cargando chats:", error);
+      setChats([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchChats();
+    }, [fetchChats]),
   );
+
+  const filteredChats = useMemo(() => {
+    const text = searchText.trim().toLowerCase();
+    if (!text) return chats;
+
+    return chats.filter(
+      (item) =>
+        item.name.toLowerCase().includes(text) ||
+        item.lastMessage.toLowerCase().includes(text),
+    );
+  }, [chats, searchText]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
-      
+
       <LinearGradient
         colors={["#886BC1", "#FF768A"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.header}
       >
-        {/* FILA SUPERIOR: Botón Regresar + Título */}
         <View style={styles.topBar}>
-            <TouchableOpacity
-                onPress={() => router.replace("/register/client/home")} // AJUSTA ESTA RUTA A TU INICIO
-                style={styles.headerIconButton}
-                activeOpacity={0.8}
-            >
-                <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Mensajes</Text>
+          <TouchableOpacity
+            onPress={() => router.replace("/register/client/home")}
+            style={styles.headerIconButton}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Mensajes</Text>
         </View>
-        
+
         <View style={styles.searchContainer}>
-          <Feather name="search" size={18} color="#A0A0A0" style={styles.searchIcon} />
+          <Feather
+            name="search"
+            size={18}
+            color="#A0A0A0"
+            style={styles.searchIcon}
+          />
           <TextInput
             placeholder="Buscar conversación..."
             placeholderTextColor="#A0A0A0"
@@ -119,13 +114,70 @@ export default function ChatList() {
         </View>
       </LinearGradient>
 
-      <FlatList
-        data={chats}
-        keyExtractor={(item) => item.id}
-        renderItem={renderChatItem}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
+      {loading ? (
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color="#886BC1" />
+        </View>
+      ) : filteredChats.length === 0 ? (
+        <View style={styles.centerState}>
+          <Text style={styles.emptyTitle}>No tienes chats disponibles</Text>
+          <Text style={styles.emptyText}>
+            Aquí solo aparecerán las niñeras con reserva confirmada o en curso.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredChats}
+          keyExtractor={(item) => item.otherUserId}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.chatCard}
+              onPress={() =>
+                router.push({
+                  pathname: "/register/client/chat",
+                  params: {
+                    otherUserId: item.otherUserId,
+                    babysitterName: item.name,
+                    babysitterPhoto: item.photo || "",
+                  },
+                })
+              }
+            >
+              <View style={styles.avatarContainer}>
+                <Image
+                  source={{
+                    uri: item.photo || "https://via.placeholder.com/150",
+                  }}
+                  style={styles.avatar}
+                />
+                {item.isOnline && <View style={styles.onlineDot} />}
+              </View>
+
+              <View style={styles.chatInfo}>
+                <View style={styles.chatHeader}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.time}>{item.time || item.status}</Text>
+                </View>
+
+                <View style={styles.chatFooter}>
+                  <Text style={styles.lastMessage} numberOfLines={1}>
+                    {item.lastMessage}
+                  </Text>
+                  {item.unreadCount > 0 && (
+                    <View style={styles.unreadBadge}>
+                      <Text style={styles.unreadText}>{item.unreadCount}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -140,8 +192,8 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 30,
   },
   topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 15,
     gap: 12,
   },
@@ -168,7 +220,6 @@ const styles = StyleSheet.create({
   },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 15, color: "#2E2E2E" },
-  
   listContent: { paddingVertical: 10 },
   chatCard: {
     flexDirection: "row",
@@ -199,8 +250,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 4,
+    gap: 10,
   },
-  name: { fontSize: 16, fontWeight: "700", color: "#2E2E2E" },
+  name: { fontSize: 16, fontWeight: "700", color: "#2E2E2E", flex: 1 },
   time: { fontSize: 12, color: "#9A9A9A" },
   chatFooter: {
     flexDirection: "row",
@@ -222,5 +274,22 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#F0F0F0",
     marginLeft: 90,
+  },
+  centerState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2E2E2E",
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
   },
 });

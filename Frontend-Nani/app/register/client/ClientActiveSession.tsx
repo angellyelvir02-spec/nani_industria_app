@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -13,10 +13,11 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  AppState,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import QRCode from "react-native-qrcode-svg";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -286,7 +287,7 @@ export default function ClientJobTracking() {
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
   const [paymentDone, setPaymentDone] = useState(false);
 
-  const fetchBookingDetail = async () => {
+  const fetchBookingDetail = useCallback(async () => {
     const bId = params.bookingId as string;
     if (!bId || bId === "undefined" || bId === "[bookingId]") return;
 
@@ -301,13 +302,29 @@ export default function ClientJobTracking() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.bookingId]);
 
   useEffect(() => {
     fetchBookingDetail();
     const interval = setInterval(fetchBookingDetail, 30000);
     return () => clearInterval(interval);
-  }, [params.bookingId]);
+  }, [fetchBookingDetail]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchBookingDetail();
+    }, [fetchBookingDetail]),
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        fetchBookingDetail();
+      }
+    });
+
+    return () => sub.remove();
+  }, [fetchBookingDetail]);
 
   useEffect(() => {
     if (booking?.status !== "en_progreso") return;
@@ -516,6 +533,10 @@ export default function ClientJobTracking() {
     booking?.status === "pendiente_confirmacion" ||
     isCompleted;
 
+  const handleGoBack = () => {
+    router.replace("/register/client/home");
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <ScrollView
@@ -527,7 +548,7 @@ export default function ClientJobTracking() {
           <View style={styles.headerTop}>
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => router.back()}
+              onPress={handleGoBack}
             >
               <ArrowLeft size={20} color="#FFFFFF" />
             </TouchableOpacity>

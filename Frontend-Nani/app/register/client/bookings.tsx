@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -12,8 +12,9 @@ import {
   Modal,
   TextInput,
   Alert,
+  AppState,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENDPOINTS } from "../../../constants/apiConfig";
 import {
@@ -28,7 +29,6 @@ import {
   QrCode,
   Timer,
 } from "lucide-react-native";
-
 type BookingStatus =
   | "confirmed"
   | "pending"
@@ -53,7 +53,7 @@ export default function BookingsListScreen() {
   const [sendingCancel, setSendingCancel] = useState(false); // Esta te faltaba
   const [cancelWarning, setCancelWarning] = useState<string | null>(null); //
 
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     try {
       if (!refreshing) setLoading(true);
       const userId = await AsyncStorage.getItem("userId");
@@ -94,7 +94,7 @@ export default function BookingsListScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [refreshing]);
 
   const handlePostReview = async () => {
     const comentarioLimpio = comment.trim();
@@ -184,9 +184,21 @@ export default function BookingsListScreen() {
     }
   };
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchBookings();
+    }, [fetchBookings]),
+  );
+
   useEffect(() => {
-    fetchBookings();
-  }, []);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        fetchBookings();
+      }
+    });
+
+    return () => sub.remove();
+  }, [fetchBookings]);
 
   const onRefresh = () => {
     setRefreshing(true);

@@ -9,6 +9,7 @@ import { NinerasModule } from './nineras/nineras.module';
 import { ReservasModule } from './reservas/reservas.module';
 import { ClientesModule } from './clientes/clientes.module';
 import { DisponibilidadModule } from './nineras/disponibilidad/disponibilidad.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { DisponibilidadModule } from './nineras/disponibilidad/disponibilidad.mo
     ReservasModule,
     ClientesModule,
     DisponibilidadModule,
+    ChatModule,
   ],  
   controllers: [AppController],
   providers: [AppService],

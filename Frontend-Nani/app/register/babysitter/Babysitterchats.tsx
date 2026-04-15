@@ -1,5 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather, Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
@@ -23,7 +23,6 @@ type ChatPreview = {
   photo: string | null;
   lastMessage: string;
   time: string;
-  unreadCount: number;
   isOnline: boolean;
   status: string;
 };
@@ -52,7 +51,7 @@ export default function BabysitterChats() {
 
       setChats(data || []);
     } catch (error) {
-      console.log("Error cargando chats de ninera:", error);
+      console.log("Error cargando chats:", error);
       setChats([]);
     } finally {
       setLoading(false);
@@ -88,7 +87,7 @@ export default function BabysitterChats() {
       >
         <View style={styles.topBar}>
           <TouchableOpacity
-            onPress={() => router.replace("/register/babysister/BabysitterDashboard")}
+            onPress={() => router.replace("/register/babysitter/BabysitterDashboard")}
             style={styles.headerIconButton}
             activeOpacity={0.8}
           >
@@ -105,7 +104,7 @@ export default function BabysitterChats() {
             style={styles.searchIcon}
           />
           <TextInput
-            placeholder="Buscar conversacion..."
+            placeholder="Buscar conversación..."
             placeholderTextColor="#A0A0A0"
             style={styles.searchInput}
             value={searchText}
@@ -122,7 +121,7 @@ export default function BabysitterChats() {
         <View style={styles.centerState}>
           <Text style={styles.emptyTitle}>No tienes chats disponibles</Text>
           <Text style={styles.emptyText}>
-            Aqui solo apareceran clientes con reserva confirmada o servicio en curso.
+            Aquí solo aparecerán clientes con reserva confirmada o en curso.
           </Text>
         </View>
       ) : (
@@ -136,7 +135,7 @@ export default function BabysitterChats() {
               style={styles.chatCard}
               onPress={() =>
                 router.push({
-                  pathname: "/register/babysister/BabysitterChatThread",
+                  pathname: "/register/babysitter/BabysitterChatThread",
                   params: {
                     otherUserId: item.otherUserId,
                     clientName: item.name,
@@ -167,11 +166,6 @@ export default function BabysitterChats() {
                   <Text style={styles.lastMessage} numberOfLines={1}>
                     {item.lastMessage}
                   </Text>
-                  {item.unreadCount > 0 && (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadText}>{item.unreadCount}</Text>
-                    </View>
-                  )}
                 </View>
               </View>
             </TouchableOpacity>
@@ -260,16 +254,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   lastMessage: { fontSize: 14, color: "#707070", flex: 1, marginRight: 10 },
-  unreadBadge: {
-    backgroundColor: "#FF768A",
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 6,
-  },
-  unreadText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
   separator: {
     height: 1,
     backgroundColor: "#F0F0F0",

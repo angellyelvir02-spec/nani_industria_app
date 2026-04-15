@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENDPOINTS } from "../../../constants/apiConfig";
 import {
@@ -122,6 +122,12 @@ export default function JobTracking() {
     return () => clearInterval(interval);
   }, [fetchBookingFromServer]);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchBookingFromServer();
+    }, [fetchBookingFromServer]),
+  );
+
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") fetchBookingFromServer();
@@ -229,6 +235,10 @@ export default function JobTracking() {
   const canScan =
     normalizedStatus === "confirmada" || normalizedStatus === "en_progreso";
 
+  const handleGoBack = () => {
+    router.replace("/register/babysister/BabysitterDashboard");
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView>
@@ -236,7 +246,7 @@ export default function JobTracking() {
           <View style={styles.headerRow}>
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => router.back()}
+              onPress={handleGoBack}
             >
               <ArrowLeft color="white" size={22} />
             </TouchableOpacity>

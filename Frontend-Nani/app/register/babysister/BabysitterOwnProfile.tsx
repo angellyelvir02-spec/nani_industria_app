@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,6 +27,7 @@ export default function BabysitterOwnProfile() {
   const [activeTab, setActiveTab] = useState<"profile" | "bookings">("profile");
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     fetchProfileData();
@@ -134,6 +136,12 @@ export default function BabysitterOwnProfile() {
         error?.message || "Ocurrió un error al cambiar la foto"
       );
     }
+  };
+
+  const handleLogout = async () => {
+    setShowLogoutModal(false);
+    await AsyncStorage.multiRemove(["userToken", "userId"]);
+    router.replace("/login");
   };
 
   if (loading) {
@@ -339,8 +347,47 @@ export default function BabysitterOwnProfile() {
           ) : (
             <Text style={styles.about}>No hay certificaciones registradas.</Text>
           )}
+
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={() => setShowLogoutModal(true)}
+          >
+            <Text style={styles.logoutButtonText}>Cerrar sesion</Text>
+          </TouchableOpacity>
         </View>
       )}
+
+      <Modal
+        visible={showLogoutModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLogoutModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>¿Cerrar sesion?</Text>
+            <Text style={styles.modalText}>
+              ¿Estas segura de que quieres cerrar sesion?
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowLogoutModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={handleLogout}
+              >
+                <Text style={styles.confirmButtonText}>Cerrar sesion</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -455,5 +502,75 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#374151",
     flex: 1,
+  },
+  logoutButton: {
+    marginTop: 20,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  logoutButtonText: {
+    color: "#DC2626",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.50)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#2E2E2E",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  modalText: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  modalButtons: {
+    flexDirection: "row",
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+    marginRight: 6,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  confirmButton: {
+    flex: 1,
+    backgroundColor: "#EF4444",
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+    marginLeft: 6,
+  },
+  confirmButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

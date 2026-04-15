@@ -13,18 +13,31 @@ export const ENDPOINTS = {
   complete_perfil_cliente: buildUrl("/auth/complete-profile"),
 
   get_nineras: buildUrl("/nineras"),
-  get_perfil_ninera: buildUrl("/nineras/usuario"),
+  get_perfil_ninera: (usuarioId: string) =>
+    buildUrl(`/nineras/usuario/${usuarioId}`),
+  get_notificaciones_ninera: (usuarioId: string) =>
+    buildUrl(`/nineras/usuario/${usuarioId}/notificaciones`),
   get_detalle_ninera: (id: number | string) => buildUrl(`/nineras/${id}`),
   update_foto_ninera: (usuarioId: string) =>
     buildUrl(`/nineras/foto/${usuarioId}`),
+  update_perfil_ninera: (usuarioId: string) =>
+    buildUrl(`/nineras/perfil/${usuarioId}`),
 
   get_disponibilidad: (id: string, fecha: string) =>
     buildUrl(`/nineras/${id}/availability?fecha=${encodeURIComponent(fecha)}`),
 
   save_disponibilidad_ninera: buildUrl("/disponibilidad/ninera"),
+  get_disponibilidad_ninera: (usuarioId: string) =>
+    buildUrl(`/disponibilidad/ninera/${usuarioId}`),
 
   get_direcciones_cliente: (clienteId: string) =>
     buildUrl(`/clientes/${clienteId}/direcciones`),
+  get_perfil_cliente: (usuarioId: string) =>
+    buildUrl(`/clientes/usuario/${usuarioId}`),
+  update_perfil_cliente: (usuarioId: string) =>
+    buildUrl(`/clientes/usuario/${usuarioId}`),
+  get_notificaciones_cliente: (usuarioId: string) =>
+    buildUrl(`/clientes/usuario/${usuarioId}/notificaciones`),
 
   get_mis_ninos: buildUrl("/clientes/mis-ninos"),
 

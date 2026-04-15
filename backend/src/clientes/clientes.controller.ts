@@ -4,6 +4,10 @@ import {
   Headers,
   BadRequestException,
   InternalServerErrorException,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Body,
 } from '@nestjs/common';
 import { ClientesService } from './clientes.service';
 import { AuthService } from '../auth/auth.service';
@@ -53,5 +57,30 @@ export class ClientesController {
         'Error interno al validar la sesión',
       );
     }
+  }
+
+  @Get('usuario/:usuarioId')
+  async getPerfil(@Param('usuarioId', ParseUUIDPipe) usuarioId: string) {
+    return this.clientesService.getPerfilByUsuario(usuarioId);
+  }
+
+  @Patch('usuario/:usuarioId')
+  async updatePerfil(
+    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
+    @Body()
+    body: {
+      nombre?: string;
+      apellido?: string;
+      telefono?: string;
+    },
+  ) {
+    return this.clientesService.updatePerfilByUsuario(usuarioId, body);
+  }
+
+  @Get('usuario/:usuarioId/notificaciones')
+  async getNotifications(
+    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
+  ) {
+    return this.clientesService.getNotificationsByUsuario(usuarioId);
   }
 }

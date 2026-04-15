@@ -57,12 +57,12 @@ export default function BabysitterDashboard() {
   const [bookingToReject, setBookingToReject] = useState<any>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectingBooking, setRejectingBooking] = useState(false);
-
-  const stats = {
-    monthEarnings: 2450,
-    rating: 4.9,
-    newMessages: 3,
-  };
+  const [stats, setStats] = useState({
+    monthEarnings: 0,
+    rating: 0,
+    newMessages: 0,
+  });
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   const DAYS = [
     "Lunes",
@@ -148,6 +148,7 @@ export default function BabysitterDashboard() {
   const fetchLoggedUser = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem("userToken");
+      const savedUserId = await AsyncStorage.getItem("userId");
 
       if (!token) {
         console.log("No hay token guardado");
@@ -171,6 +172,18 @@ export default function BabysitterDashboard() {
 
       const nombre = data?.persona?.nombre || "Usuario";
       setUserName(nombre);
+
+      if (savedUserId) {
+        const profileResponse = await fetch(ENDPOINTS.get_perfil_ninera(savedUserId));
+        const profileData = await profileResponse.json();
+
+        if (profileResponse.ok) {
+          setStats((prev) => ({
+            ...prev,
+            rating: Number(profileData?.promedio_rating || 0),
+          }));
+        }
+      }
     } catch (error) {
       console.log("Error fetchLoggedUser:", error);
     }
@@ -255,6 +268,7 @@ export default function BabysitterDashboard() {
           notes: item.notas_importantes || "Sin notas",
           latitude,
           longitude,
+          rawDate: fecha,
         };
       });
 
@@ -264,7 +278,29 @@ export default function BabysitterDashboard() {
         ),
       );
 
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(
+        now.getMonth() + 1,
+      ).padStart(2, "0")}`;
+
+      const monthEarnings = mappedBookings
+        .filter((booking: any) => {
+          const bookingMonth = String(booking.rawDate || "").slice(0, 7);
+          return (
+            bookingMonth === currentMonth &&
+            normalizeBookingStatus(booking.status) === "completada"
+          );
+        })
+        .reduce(
+          (total: number, booking: any) => total + Number(booking.payment || 0),
+          0,
+        );
+
       setPendingBookings(activeBookings);
+      setStats((prev) => ({
+        ...prev,
+        monthEarnings,
+      }));
     } catch (error) {
       console.log("Error fetchPendingBookings:", error);
     } finally {
@@ -272,11 +308,92 @@ export default function BabysitterDashboard() {
     }
   }, []);
 
+  const fetchChatStats = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+
+      if (!token) return;
+
+      const response = await fetch(ENDPOINTS.get_chat_conversations, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        return;
+      }
+
+      const messageCount = Array.isArray(data)
+        ? data.filter((item: any) => item.chatId || item.lastMessage).length
+        : 0;
+
+      setStats((prev) => ({
+        ...prev,
+        newMessages: messageCount,
+      }));
+    } catch (error) {
+      console.log("Error fetchChatStats:", error);
+    }
+  }, []);
+
+  const fetchSavedAvailability = useCallback(async () => {
+    try {
+      const savedUserId = await AsyncStorage.getItem("userId");
+
+      if (!savedUserId) return;
+
+      const response = await fetch(
+        ENDPOINTS.get_disponibilidad_ninera(savedUserId),
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        return;
+      }
+
+      setAvailabilityList(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.log("Error fetchSavedAvailability:", error);
+    }
+  }, []);
+
+  const fetchNotificationStats = useCallback(async () => {
+    try {
+      const savedUserId = await AsyncStorage.getItem("userId");
+
+      if (!savedUserId) return;
+
+      const response = await fetch(
+        ENDPOINTS.get_notificaciones_ninera(savedUserId),
+      );
+      const data = await response.json();
+
+      if (!response.ok || !Array.isArray(data)) {
+        return;
+      }
+
+      setUnreadNotifications(data.filter((item: any) => !item.read).length);
+    } catch (error) {
+      console.log("Error fetchNotificationStats:", error);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       fetchLoggedUser();
       fetchPendingBookings();
-    }, [fetchLoggedUser, fetchPendingBookings]),
+      fetchChatStats();
+      fetchSavedAvailability();
+      fetchNotificationStats();
+    }, [
+      fetchLoggedUser,
+      fetchPendingBookings,
+      fetchChatStats,
+      fetchSavedAvailability,
+      fetchNotificationStats,
+    ]),
   );
 
   const handleAvailabilityInputChange = (
@@ -306,6 +423,7 @@ export default function BabysitterDashboard() {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${await AsyncStorage.getItem("userToken")}`,
           },
           body: JSON.stringify({
             estado: "confirmada",
@@ -501,12 +619,7 @@ export default function BabysitterDashboard() {
       }
 
       Alert.alert("Éxito", "Disponibilidad guardada correctamente");
-      setAvailabilityList([]);
-      setAvailabilityForm({
-        dia: "",
-        hora_inicio: "",
-        hora_fin: "",
-      });
+      await fetchSavedAvailability();
       setIsAvailabilityOpen(false);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Error guardando disponibilidad");
@@ -531,16 +644,18 @@ export default function BabysitterDashboard() {
             onPress={() => router.push("./BabysitterNotifications")}
           >
             <Bell color="white" size={22} />
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{stats.newMessages}</Text>
-            </View>
+            {unreadNotifications > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{unreadNotifications}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <TrendingUp color="white" size={20} />
-            <Text style={styles.statValue}>${stats.monthEarnings}</Text>
+            <Text style={styles.statValue}>L {stats.monthEarnings}</Text>
             <Text style={styles.statLabel}>Este mes</Text>
           </View>
 
@@ -904,11 +1019,13 @@ export default function BabysitterDashboard() {
               <X />
             </TouchableOpacity>
 
+            <Text style={styles.modalTitle}>Gestionar disponibilidad</Text>
+
             <ScrollView
+              style={styles.availabilityScrollArea}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingTop: 10, paddingBottom: 10 }}
+              contentContainerStyle={styles.availabilityScrollContent}
             >
-              <Text style={styles.modalTitle}>Gestionar disponibilidad</Text>
 
               <Text style={styles.inputLabel}>Día</Text>
               <View style={styles.optionsWrap}>
@@ -997,7 +1114,7 @@ export default function BabysitterDashboard() {
                 </Text>
               </TouchableOpacity>
 
-              <ScrollView style={{ maxHeight: 180, marginTop: 12 }}>
+              <View style={styles.availabilityListWrap}>
                 {availabilityList.map((item) => (
                   <View key={item.id} style={styles.availabilityItem}>
                     <View>
@@ -1016,20 +1133,18 @@ export default function BabysitterDashboard() {
                     </TouchableOpacity>
                   </View>
                 ))}
-              </ScrollView>
-
-              <TouchableOpacity
-                style={[styles.okBtn, savingAvailability && { opacity: 0.7 }]}
-                onPress={saveAvailability}
-                disabled={savingAvailability}
-              >
-                <Text style={{ color: "white" }}>
-                  {savingAvailability
-                    ? "Guardando..."
-                    : "Guardar disponibilidad"}
-                </Text>
-              </TouchableOpacity>
+              </View>
             </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.okBtn, savingAvailability && { opacity: 0.7 }]}
+              onPress={saveAvailability}
+              disabled={savingAvailability}
+            >
+              <Text style={{ color: "white" }}>
+                {savingAvailability ? "Guardando..." : "Guardar disponibilidad"}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1210,6 +1325,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
   },
+  availabilityScrollArea: {
+    flexGrow: 0,
+  },
+  availabilityScrollContent: {
+    paddingTop: 10,
+    paddingBottom: 16,
+  },
 
   modalTitle: { fontSize: 18, marginBottom: 10 },
 
@@ -1262,6 +1384,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#666",
     marginTop: 2,
+  },
+  availabilityListWrap: {
+    marginTop: 12,
+    paddingBottom: 4,
+    gap: 8,
   },
 
   removeText: {

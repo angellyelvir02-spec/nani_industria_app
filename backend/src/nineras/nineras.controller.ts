@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Patch,
+  Body,
   UploadedFile,
   UseInterceptors,
   Query,
@@ -27,6 +28,13 @@ export class NinerasController {
   @Get('/usuario/:usuarioId')
   async findByUsuario(@Param('usuarioId', ParseUUIDPipe) usuarioId: string) {
     return this.ninerasService.findOneByUsuario(usuarioId);
+  }
+
+  @Get('/usuario/:usuarioId/notificaciones')
+  async getNotifications(
+    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
+  ) {
+    return this.ninerasService.getNotificationsByUsuario(usuarioId);
   }
 
   // Actualiza la foto de perfil de la niñera
@@ -61,6 +69,19 @@ export class NinerasController {
     }
 
     return this.ninerasService.updateFotoPerfil(usuarioId, foto);
+  }
+
+  @Patch('/perfil/:usuarioId')
+  async updatePerfilBasico(
+    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
+    @Body()
+    body: {
+      presentacion?: string;
+      habilidades?: string[];
+      certificaciones?: string[];
+    },
+  ) {
+    return this.ninerasService.updatePerfilBasico(usuarioId, body);
   }
 
   // Retorna el detalle de una niñera por su ID

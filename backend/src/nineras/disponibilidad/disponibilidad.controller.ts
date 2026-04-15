@@ -1,9 +1,22 @@
-import { Body, Controller, Post, BadRequestException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  BadRequestException,
+  Get,
+  Param,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { DisponibilidadService } from './disponibilidad.service';
 
 @Controller('disponibilidad')
 export class DisponibilidadController {
   constructor(private readonly disponibilidadService: DisponibilidadService) {}
+
+  @Get('ninera/:usuarioId')
+  async getDisponibilidad(@Param('usuarioId', ParseUUIDPipe) usuarioId: string) {
+    return this.disponibilidadService.getDisponibilidadByUsuario(usuarioId);
+  }
 
   @Post('ninera')
   async saveDisponibilidad(

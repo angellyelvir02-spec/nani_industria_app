@@ -11,6 +11,30 @@ import { Disponibilidad_reserva } from './dto/disponibilidad.dto';
 export class NinerasService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
+  private formatRelativeTime(dateString?: string | null) {
+    if (!dateString) return 'Reciente';
+
+    const now = new Date().getTime();
+    const date = new Date(dateString).getTime();
+    const diffMinutes = Math.max(1, Math.floor((now - date) / 60000));
+
+    if (diffMinutes < 60) {
+      return `Hace ${diffMinutes} min`;
+    }
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) {
+      return `Hace ${diffHours} h`;
+    }
+
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) {
+      return `Hace ${diffDays} d`;
+    }
+
+    return new Date(dateString).toLocaleDateString('es-HN');
+  }
+
   // Retorna las niñeras verificadas para mostrarse en el dashboard del cliente
   async findAll() {
     const client = this.supabaseService.getAdminClient();
@@ -220,7 +244,24 @@ export class NinerasService {
         throw new NotFoundException('No se encontró el perfil');
       }
 
-      return data;
+      const { data: resenas, error: resError } = await client
+        .from('resena')
+        .select('puntuacion')
+        .eq('receptor_id', (data as any).usuario_id);
+
+      const promedio_rating =
+        !resError && resenas && resenas.length > 0
+          ? parseFloat(
+              (
+                resenas.reduce(
+                  (acc: number, r: any) => acc + (r.puntuacion || 0),
+                  0,
+                ) / resenas.length
+              ).toFixed(1),
+            )
+          : 0.0;
+
+      return { ...data, promedio_rating };
     } catch (err) {
       console.error('Error crítico en findOneByUsuario:', err);
 
@@ -512,5 +553,275 @@ export class NinerasService {
         autor_foto: persona?.foto_url || null,
       };
     });
+  }
+
+  async updatePerfilBasico(
+    usuarioId: string,
+    body: {
+      presentacion?: string;
+      habilidades?: string[];
+      certificaciones?: string[];
+    },
+  ) {
+    const client = this.supabaseService.getAdminClient();
+
+    const { data: ninera, error: nineraError } = await client
+      .from('ninera')
+      .select('id')
+      .eq('usuario_id', usuarioId)
+      .maybeSingle();
+
+    if (nineraError) {
+      throw new InternalServerErrorException(
+        `Error de base de datos: ${nineraError.message}`,
+      );
+    }
+
+    if (!ninera) {
+      throw new NotFoundException('No se encontró la niñera');
+    }
+
+    const presentacion =
+      body.presentacion !== undefined ? String(body.presentacion).trim() : null;
+    const habilidades = Array.isArray(body.habilidades)
+      ? body.habilidades
+          .map((item) => String(item).trim())
+          .filter((item) => item.length > 0)
+      : null;
+    const certificaciones = Array.isArray(body.certificaciones)
+      ? body.certificaciones
+          .map((item) => String(item).trim())
+          .filter((item) => item.length > 0)
+      : null;
+
+    if (presentacion !== null) {
+      const { error: updateError } = await client
+        .from('ninera')
+        .update({ presentacion })
+        .eq('id', ninera.id);
+
+      if (updateError) {
+        throw new InternalServerErrorException(
+          `Error actualizando presentación: ${updateError.message}`,
+        );
+      }
+    }
+
+    if (habilidades) {
+      const { error: deleteError } = await client
+        .from('habilidad_ninera')
+        .delete()
+        .eq('ninera_id', ninera.id);
+
+      if (deleteError) {
+        throw new InternalServerErrorException(
+          `Error limpiando habilidades: ${deleteError.message}`,
+        );
+      }
+
+      if (habilidades.length > 0) {
+        const { error: insertError } = await client
+          .from('habilidad_ninera')
+          .insert(
+            habilidades.map((nombre) => ({
+              ninera_id: ninera.id,
+              nombre,
+            })),
+          );
+
+        if (insertError) {
+          throw new InternalServerErrorException(
+            `Error guardando habilidades: ${insertError.message}`,
+          );
+        }
+      }
+    }
+
+    if (certificaciones) {
+      const { error: deleteError } = await client
+        .from('certificaciones_ninera')
+        .delete()
+        .eq('ninera_id', ninera.id);
+
+      if (deleteError) {
+        throw new InternalServerErrorException(
+          `Error limpiando certificaciones: ${deleteError.message}`,
+        );
+      }
+
+      if (certificaciones.length > 0) {
+        const { error: insertError } = await client
+          .from('certificaciones_ninera')
+          .insert(
+            certificaciones.map((nombre) => ({
+              ninera_id: ninera.id,
+              nombre,
+            })),
+          );
+
+        if (insertError) {
+          throw new InternalServerErrorException(
+            `Error guardando certificaciones: ${insertError.message}`,
+          );
+        }
+      }
+    }
+
+    return this.findOneByUsuario(usuarioId);
+  }
+
+  async getNotificationsByUsuario(usuarioId: string) {
+    const admin = this.supabaseService.getAdminClient();
+
+    const { data: ninera, error: nineraError } = await admin
+      .from('ninera')
+      .select('id')
+      .eq('usuario_id', usuarioId)
+      .maybeSingle();
+
+    if (nineraError) {
+      throw new InternalServerErrorException(
+        `Error de base de datos: ${nineraError.message}`,
+      );
+    }
+
+    if (!ninera) {
+      throw new NotFoundException('No se encontro el perfil de ninera');
+    }
+
+    const { data: reservas, error: reservasError } = await admin
+      .from('reserva')
+      .select(
+        `
+        id,
+        estado,
+        fecha_servicio,
+        created_at,
+        cliente:cliente_id (
+          persona:persona_id (
+            nombre,
+            apellido
+          )
+        )
+      `,
+      )
+      .eq('ninera_id', ninera.id)
+      .in('estado', ['pendiente', 'confirmada', 'en_progreso', 'completada'])
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (reservasError) {
+      throw new InternalServerErrorException(
+        `Error obteniendo reservas: ${reservasError.message}`,
+      );
+    }
+
+    const { data: resenas, error: resenasError } = await admin
+      .from('resena')
+      .select(
+        `
+        id,
+        puntuacion,
+        comentario,
+        created_at,
+        autor:autor_id (
+          cliente:cliente_usuario_id_fkey (
+            persona:persona_id (
+              nombre,
+              apellido
+            )
+          )
+        )
+      `,
+      )
+      .eq('receptor_id', usuarioId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (resenasError) {
+      throw new InternalServerErrorException(
+        `Error obteniendo resenas: ${resenasError.message}`,
+      );
+    }
+
+    const notificationItems = [
+      ...(reservas || []).map((reserva: any) => {
+        const persona = Array.isArray(reserva.cliente?.persona)
+          ? reserva.cliente.persona[0]
+          : reserva.cliente?.persona;
+        const clienteNombre = persona
+          ? `${persona.nombre} ${persona.apellido}`.trim()
+          : 'Un cliente';
+
+        let title = 'Actividad de reserva';
+        let message = `${clienteNombre} tiene una actualizacion en su reserva.`;
+        let color = '#886BC1';
+        let icon = 'calendar';
+        let read = true;
+
+        if (reserva.estado === 'pendiente') {
+          title = 'Nueva solicitud de reserva';
+          message = `${clienteNombre} solicito una reserva para ${reserva.fecha_servicio}.`;
+          color = '#FF768A';
+          read = false;
+        } else if (reserva.estado === 'confirmada') {
+          title = 'Reserva confirmada';
+          message = `La reserva con ${clienteNombre} ya fue confirmada.`;
+          color = '#22C55E';
+        } else if (reserva.estado === 'en_progreso') {
+          title = 'Servicio en curso';
+          message = `Tu servicio con ${clienteNombre} esta en progreso.`;
+          color = '#886BC1';
+        } else if (reserva.estado === 'completada') {
+          title = 'Servicio completado';
+          message = `La reserva con ${clienteNombre} fue completada.`;
+          color = '#0EA5E9';
+        }
+
+        return {
+          id: `booking-${reserva.id}`,
+          type: 'booking',
+          title,
+          message,
+          time: this.formatRelativeTime(reserva.created_at),
+          read,
+          icon,
+          color,
+          createdAt: reserva.created_at,
+        };
+      }),
+      ...(resenas || []).map((resena: any) => {
+        const cliente = Array.isArray(resena.autor?.cliente)
+          ? resena.autor.cliente[0]
+          : resena.autor?.cliente;
+        const persona = Array.isArray(cliente?.persona)
+          ? cliente.persona[0]
+          : cliente?.persona;
+        const autorNombre = persona
+          ? `${persona.nombre} ${persona.apellido}`.trim()
+          : 'Un cliente';
+
+        return {
+          id: `review-${resena.id}`,
+          type: 'review',
+          title: 'Nueva resena',
+          message: `${autorNombre} te dejo ${resena.puntuacion} estrellas${
+            resena.comentario ? `: ${resena.comentario}` : '.'
+          }`,
+          time: this.formatRelativeTime(resena.created_at),
+          read: false,
+          icon: 'star',
+          color: '#F59E0B',
+          createdAt: resena.created_at,
+        };
+      }),
+    ]
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )
+      .slice(0, 25);
+
+    return notificationItems;
   }
 }

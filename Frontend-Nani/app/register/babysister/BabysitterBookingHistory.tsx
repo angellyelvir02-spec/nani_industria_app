@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
 import { ENDPOINTS } from "../../../constants/apiConfig";
 
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
@@ -13,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 interface Props {
   onBack: () => void;
@@ -27,6 +29,7 @@ type BookingStatus =
   | "rejected";
 
 export default function BabysitterBookingHistory({ onBack }: Props) {
+  const router = useRouter();
   const [filter, setFilter] = useState<BookingStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [bookings, setBookings] = useState<any[]>([]);
@@ -174,21 +177,31 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color="#886BC1" />
-        <Text style={{ textAlign: "center", marginTop: 12 }}>
-          Cargando reservas...
-        </Text>
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <View style={[styles.container, styles.centerContent]}>
+          <ActivityIndicator size="large" color="#886BC1" />
+          <Text style={{ textAlign: "center", marginTop: 12 }}>
+            Cargando reservas...
+          </Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <View style={styles.container}>
       <ScrollView>
         <View style={styles.header}>
           <View style={styles.headerRow}>
-            <TouchableOpacity style={styles.backButton} onPress={onBack}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() =>
+                onBack
+                  ? onBack()
+                  : router.replace("/register/babysister/BabysitterDashboard")
+              }
+            >
               <Ionicons name="arrow-back" size={20} color="white" />
             </TouchableOpacity>
 
@@ -361,11 +374,16 @@ export default function BabysitterBookingHistory({ onBack }: Props) {
           )}
         </View>
       </ScrollView>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#886BC1",
+  },
   container: {
     flex: 1,
     backgroundColor: "#FAFAFA",
@@ -377,7 +395,7 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    paddingTop: 60,
+    paddingTop: 14,
     paddingHorizontal: 20,
     paddingBottom: 20,
     backgroundColor: "#886BC1",
@@ -562,3 +580,5 @@ const styles = StyleSheet.create({
   },
   rejected: { color: "#DC2626", fontSize: 12, fontWeight: "600" },
 });
+
+

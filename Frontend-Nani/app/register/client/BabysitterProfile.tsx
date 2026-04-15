@@ -437,3 +437,4 @@ const styles = StyleSheet.create({
   },
   bookButtonText: { color: "#FFF", fontSize: 16, fontWeight: "800" },
 });
+

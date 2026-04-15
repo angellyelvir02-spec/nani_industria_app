@@ -292,3 +292,4 @@ const styles = StyleSheet.create({
   },
   downloadButtonText: { color: "#886BC1", fontWeight: "bold", fontSize: 15 },
 });
+

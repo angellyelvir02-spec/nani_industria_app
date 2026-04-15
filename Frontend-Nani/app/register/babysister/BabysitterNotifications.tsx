@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { ENDPOINTS } from "../../../constants/apiConfig";
 
 type NotificationItem = {
@@ -63,7 +64,8 @@ export default function BabysitterNotifications() {
   const unreadCount = notifications.filter((item) => !item.read).length;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <View style={styles.headerRow}>
@@ -154,11 +156,16 @@ export default function BabysitterNotifications() {
           )}
         </View>
       </ScrollView>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#886BC1",
+  },
   container: {
     flex: 1,
     backgroundColor: "#FAFAFA",
@@ -167,7 +174,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   header: {
-    paddingTop: 60,
+    paddingTop: 14,
     paddingHorizontal: 20,
     paddingBottom: 20,
     backgroundColor: "#886BC1",
@@ -289,3 +296,5 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 });
+
+

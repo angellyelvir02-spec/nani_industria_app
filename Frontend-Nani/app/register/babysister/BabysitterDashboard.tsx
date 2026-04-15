@@ -13,6 +13,7 @@ import {
 } from "react-native";
 
 import { useFocusEffect, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENDPOINTS } from "../../../constants/apiConfig";
@@ -31,6 +32,7 @@ import {
 
 export default function BabysitterDashboard() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState("home");
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
@@ -814,7 +816,7 @@ export default function BabysitterDashboard() {
         </View>
       </ScrollView>
 
-      <View style={styles.navbar}>
+      <View style={[styles.navbar, { paddingBottom: Math.max(insets.bottom, 15) }]}>
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => setActiveTab("home")}
@@ -1485,3 +1487,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 });
+
+

@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowLeft,
   Send,
@@ -35,6 +36,7 @@ export default function BabysitterChatThread() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const listRef = useRef<FlatList<Message>>(null);
+  const insets = useSafeAreaInsets();
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,11 +87,21 @@ export default function BabysitterChatThread() {
 
   useEffect(() => {
     if (messages.length > 0) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         listRef.current?.scrollToEnd({ animated: true });
       }, 100);
+
+      return () => clearTimeout(timer);
     }
   }, [messages]);
+
+  const scrollToLatestMessage = useCallback(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        listRef.current?.scrollToEnd({ animated: true });
+      }, 120);
+    });
+  }, []);
 
   const formatTime = (dateString: string) =>
     new Date(dateString).toLocaleTimeString("es-HN", {
@@ -125,129 +137,148 @@ export default function BabysitterChatThread() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity style={styles.circleButton} onPress={() => router.back()}>
-            <ArrowLeft color="white" size={20} />
-          </TouchableOpacity>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 18}
+      >
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              style={styles.circleButton}
+              onPress={() => router.back()}
+            >
+              <ArrowLeft color="white" size={20} />
+            </TouchableOpacity>
 
-          <View style={styles.profileRow}>
-            <View style={styles.avatarContainer}>
-              <Image
-                source={{
-                  uri: counterpart.photo || "https://via.placeholder.com/150",
-                }}
-                style={styles.avatar}
-              />
-              <View style={styles.onlineDot} />
+            <View style={styles.profileRow}>
+              <View style={styles.avatarContainer}>
+                <Image
+                  source={{
+                    uri: counterpart.photo || "https://via.placeholder.com/150",
+                  }}
+                  style={styles.avatar}
+                />
+                <View style={styles.onlineDot} />
+              </View>
+
+              <View>
+                <Text style={styles.name}>{counterpart.name}</Text>
+                <Text style={styles.status}>{counterpart.status}</Text>
+              </View>
             </View>
 
-            <View>
-              <Text style={styles.name}>{counterpart.name}</Text>
-              <Text style={styles.status}>{counterpart.status}</Text>
-            </View>
+            <TouchableOpacity style={styles.circleButton}>
+              <Phone color="white" size={20} />
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity style={styles.circleButton}>
-            <Phone color="white" size={20} />
-          </TouchableOpacity>
         </View>
-      </View>
 
-      {loading ? (
-        <View style={styles.loadingState}>
-          <ActivityIndicator size="large" color="#886BC1" />
-        </View>
-      ) : (
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.messagesContainer}
-          renderItem={({ item }) => {
-            const isUser = item.sender === "me";
+        {loading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="large" color="#886BC1" />
+          </View>
+        ) : (
+          <FlatList
+            ref={listRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.messagesContainer}
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={scrollToLatestMessage}
+            renderItem={({ item }) => {
+              const isUser = item.sender === "me";
 
-            return (
-              <View
-                style={[
-                  styles.messageRow,
-                  { justifyContent: isUser ? "flex-end" : "flex-start" },
-                ]}
-              >
-                <View style={{ maxWidth: "75%" }}>
-                  <View
-                    style={[
-                      styles.messageBubble,
-                      isUser ? styles.userBubble : styles.babysitterBubble,
-                    ]}
-                  >
-                    <Text style={isUser ? styles.userText : styles.babysitterText}>
-                      {item.text}
+              return (
+                <View
+                  style={[
+                    styles.messageRow,
+                    { justifyContent: isUser ? "flex-end" : "flex-start" },
+                  ]}
+                >
+                  <View style={{ maxWidth: "75%" }}>
+                    <View
+                      style={[
+                        styles.messageBubble,
+                        isUser ? styles.userBubble : styles.babysitterBubble,
+                      ]}
+                    >
+                      <Text
+                        style={isUser ? styles.userText : styles.babysitterText}
+                      >
+                        {item.text}
+                      </Text>
+                    </View>
+
+                    <Text
+                      style={[
+                        styles.time,
+                        { textAlign: isUser ? "right" : "left" },
+                      ]}
+                    >
+                      {formatTime(item.createdAt)}
                     </Text>
                   </View>
-
-                  <Text
-                    style={[
-                      styles.time,
-                      { textAlign: isUser ? "right" : "left" },
-                    ]}
-                  >
-                    {formatTime(item.createdAt)}
-                  </Text>
                 </View>
-              </View>
-            );
-          }}
-        />
-      )}
-
-      <View style={styles.inputContainer}>
-        <TouchableOpacity style={styles.iconButton}>
-          <Paperclip color="#777" size={20} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.iconButton}>
-          <ImageIcon color="#777" size={20} />
-        </TouchableOpacity>
-
-        <View style={styles.inputBox}>
-          <TextInput
-            placeholder="Escribe un mensaje..."
-            value={message}
-            onChangeText={setMessage}
-            style={styles.input}
+              );
+            }}
           />
+        )}
 
-          <TouchableOpacity>
-            <Smile color="#999" size={20} />
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity
-          onPress={handleSend}
+        <View
           style={[
-            styles.sendButton,
-            { backgroundColor: message.trim() ? "#FF768A" : "#EEE" },
+            styles.inputContainer,
+            { paddingBottom: Math.max(insets.bottom, 12) },
           ]}
         >
-          <Send size={20} color={message.trim() ? "white" : "#999"} />
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+          <TouchableOpacity style={styles.iconButton}>
+            <Paperclip color="#777" size={20} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.iconButton}>
+            <ImageIcon color="#777" size={20} />
+          </TouchableOpacity>
+
+          <View style={styles.inputBox}>
+            <TextInput
+              placeholder="Escribe un mensaje..."
+              value={message}
+              onChangeText={setMessage}
+              style={styles.input}
+              onFocus={scrollToLatestMessage}
+            />
+
+            <TouchableOpacity>
+              <Smile color="#999" size={20} />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            onPress={handleSend}
+            style={[
+              styles.sendButton,
+              { backgroundColor: message.trim() ? "#FF768A" : "#EEE" },
+            ]}
+          >
+            <Send size={20} color={message.trim() ? "white" : "#999"} />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#886BC1",
+  },
   container: {
     flex: 1,
     backgroundColor: "#FAFAFA",
   },
   header: {
-    paddingTop: 60,
     paddingBottom: 15,
     paddingHorizontal: 20,
     backgroundColor: "#886BC1",
@@ -340,6 +371,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 15,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderColor: "#eee",
     backgroundColor: "white",
@@ -373,3 +405,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
+
+

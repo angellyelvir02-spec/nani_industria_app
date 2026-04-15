@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   Image,
   TextInput,
@@ -12,9 +11,11 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  StatusBar,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowLeft,
   Send,
@@ -37,6 +38,7 @@ export default function ChatScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const listRef = useRef<FlatList<Message>>(null);
+  const insets = useSafeAreaInsets();
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,11 +89,21 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (messages.length > 0) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         listRef.current?.scrollToEnd({ animated: true });
       }, 100);
+
+      return () => clearTimeout(timer);
     }
   }, [messages]);
+
+  const scrollToLatestMessage = useCallback(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        listRef.current?.scrollToEnd({ animated: true });
+      }, 120);
+    });
+  }, []);
 
   const formatTime = (dateString: string) =>
     new Date(dateString).toLocaleTimeString("es-HN", {
@@ -128,12 +140,14 @@ export default function ChatScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={[]}>
+      <StatusBar barStyle="light-content" backgroundColor="#886BC1" />
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.headerIconButton}
@@ -179,6 +193,8 @@ export default function ChatScreen() {
             ref={listRef}
             data={messages}
             keyExtractor={(item) => item.id}
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={scrollToLatestMessage}
             renderItem={({ item }) => {
               const isUser = item.sender === "me";
 
@@ -229,7 +245,12 @@ export default function ChatScreen() {
           />
         )}
 
-        <View style={styles.inputArea}>
+        <View
+          style={[
+            styles.inputArea,
+            { paddingBottom: Math.max(insets.bottom, 12) },
+          ]}
+        >
           <TouchableOpacity style={styles.secondaryActionButton}>
             <Paperclip size={18} color="#6B7280" />
           </TouchableOpacity>
@@ -247,6 +268,7 @@ export default function ChatScreen() {
               style={styles.input}
               multiline
               maxLength={500}
+              onFocus={scrollToLatestMessage}
             />
 
             <TouchableOpacity style={styles.smileButton} activeOpacity={0.8}>
@@ -274,7 +296,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#886BC1",
+    backgroundColor: "#FAFAFA",
   },
   container: {
     flex: 1,
@@ -283,7 +305,6 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: "#886BC1",
     paddingHorizontal: 16,
-    paddingTop: 14,
     paddingBottom: 14,
     flexDirection: "row",
     alignItems: "center",
@@ -462,3 +483,4 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
   },
 });
+

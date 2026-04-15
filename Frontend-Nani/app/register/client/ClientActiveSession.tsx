@@ -1439,3 +1439,4 @@ const styles = StyleSheet.create({
   },
   payBtnText: { color: "#FFF", fontWeight: "800", fontSize: 15 },
 });
+

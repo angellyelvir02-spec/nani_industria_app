@@ -17,13 +17,14 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ENDPOINTS } from "../../../constants/apiConfig";
 
 type Message = {
@@ -37,6 +38,7 @@ export default function BabysitterChatThread() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const listRef = useRef<FlatList<Message>>(null);
+  const insets = useSafeAreaInsets();
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,11 +89,21 @@ export default function BabysitterChatThread() {
 
   useEffect(() => {
     if (messages.length > 0) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         listRef.current?.scrollToEnd({ animated: true });
       }, 100);
+
+      return () => clearTimeout(timer);
     }
   }, [messages]);
+
+  const scrollToLatestMessage = useCallback(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        listRef.current?.scrollToEnd({ animated: true });
+      }, 120);
+    });
+  }, []);
 
   const formatTime = (dateString: string) =>
     new Date(dateString).toLocaleTimeString("es-HN", {
@@ -128,10 +140,12 @@ export default function BabysitterChatThread() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <StatusBar barStyle="light-content" backgroundColor="#886BC1" />
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <View style={styles.header}>
           <TouchableOpacity
@@ -179,6 +193,8 @@ export default function BabysitterChatThread() {
             ref={listRef}
             data={messages}
             keyExtractor={(item) => item.id}
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={scrollToLatestMessage}
             renderItem={({ item }) => {
               const isUser = item.sender === "me";
 
@@ -229,7 +245,12 @@ export default function BabysitterChatThread() {
           />
         )}
 
-        <View style={styles.inputArea}>
+        <View
+          style={[
+            styles.inputArea,
+            { paddingBottom: Math.max(insets.bottom, 12) },
+          ]}
+        >
           <TouchableOpacity style={styles.secondaryActionButton}>
             <Paperclip size={18} color="#6B7280" />
           </TouchableOpacity>
@@ -247,6 +268,7 @@ export default function BabysitterChatThread() {
               style={styles.input}
               multiline
               maxLength={500}
+              onFocus={scrollToLatestMessage}
             />
 
             <TouchableOpacity style={styles.smileButton} activeOpacity={0.8}>
@@ -283,7 +305,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: "#886BC1",
     paddingHorizontal: 16,
-    paddingTop: 14,
+    paddingTop: 12,
     paddingBottom: 14,
     flexDirection: "row",
     alignItems: "center",
@@ -354,7 +376,7 @@ const styles = StyleSheet.create({
   messagesContent: {
     paddingHorizontal: 16,
     paddingVertical: 16,
-    paddingBottom: 10,
+    paddingBottom: 24,
   },
   messageRow: {
     marginBottom: 14,
@@ -409,7 +431,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#F1F1F1",
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingTop: 12,
     flexDirection: "row",
     alignItems: "flex-end",
   },
@@ -462,3 +484,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
   },
 });
+
+

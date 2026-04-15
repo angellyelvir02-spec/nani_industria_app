@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ENDPOINTS } from "../../../constants/apiConfig";
 
 type ChatPreview = {
@@ -29,6 +29,7 @@ type ChatPreview = {
 
 export default function BabysitterChats() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<ChatPreview[]>([]);
@@ -76,18 +77,18 @@ export default function BabysitterChats() {
   }, [chats, searchText]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <StatusBar barStyle="light-content" />
 
       <LinearGradient
         colors={["#886BC1", "#FF768A"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
-        style={styles.header}
+        style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
         <View style={styles.topBar}>
           <TouchableOpacity
-            onPress={() => router.replace("/register/babysitter/BabysitterDashboard")}
+            onPress={() => router.replace("/register/babysister/BabysitterDashboard")}
             style={styles.headerIconButton}
             activeOpacity={0.8}
           >
@@ -113,6 +114,7 @@ export default function BabysitterChats() {
         </View>
       </LinearGradient>
 
+      <View style={styles.content}>
       {loading ? (
         <View style={styles.centerState}>
           <ActivityIndicator size="large" color="#886BC1" />
@@ -172,18 +174,22 @@ export default function BabysitterChats() {
           )}
         />
       )}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FFFFFF" },
+  safeArea: { flex: 1, backgroundColor: "#886BC1" },
   header: {
-    paddingTop: 15,
     paddingHorizontal: 20,
     paddingBottom: 25,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
+  },
+  content: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
   },
   topBar: {
     flexDirection: "row",
@@ -214,7 +220,7 @@ const styles = StyleSheet.create({
   },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 15, color: "#2E2E2E" },
-  listContent: { paddingVertical: 10 },
+  listContent: { paddingVertical: 10, paddingBottom: 20 },
   chatCard: {
     flexDirection: "row",
     paddingHorizontal: 20,
@@ -277,3 +283,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 });
+
+

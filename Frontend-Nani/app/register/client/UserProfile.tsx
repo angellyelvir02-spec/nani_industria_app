@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   Image,
   Modal,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -15,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Feather,
   Ionicons,
@@ -27,6 +27,7 @@ const DEFAULT_PHOTO =
   "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 
 export default function UserProfile() {
+  const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -166,7 +167,7 @@ export default function UserProfile() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <StatusBar barStyle="light-content" backgroundColor="#886BC1" />
       <View style={styles.container}>
         <ScrollView
@@ -179,14 +180,15 @@ export default function UserProfile() {
             end={{ x: 1, y: 0 }}
             style={styles.header}
           >
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => router.back()}
-            >
-              <Feather name="arrow-left" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-
-            <Text style={styles.headerTitle}>Mi perfil</Text>
+            <View style={styles.headerTopRow}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => router.back()}
+              >
+                <Feather name="arrow-left" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>Mi perfil</Text>
+            </View>
           </LinearGradient>
 
           <View style={styles.profileWrapper}>
@@ -331,7 +333,9 @@ export default function UserProfile() {
           </View>
         </ScrollView>
 
-        <View style={styles.bottomNav}>
+        <View
+          style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 14) }]}
+        >
           <TouchableOpacity
             style={styles.navItem}
             onPress={() => router.push("/register/client/home")}
@@ -471,11 +475,16 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
   header: {
-    paddingTop: 20,
+    paddingTop: 14,
     paddingBottom: 32,
     paddingHorizontal: 24,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
+  },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   backButton: {
     width: 40,
@@ -484,11 +493,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.20)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 24,
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "700",
   },
   profileWrapper: {
@@ -753,3 +761,4 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 });
+

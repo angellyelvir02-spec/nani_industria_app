@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ENDPOINTS } from "../../../constants/apiConfig";
 
 type ChatPreview = {
@@ -30,6 +30,7 @@ type ChatPreview = {
 
 export default function ChatList() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<ChatPreview[]>([]);
@@ -77,7 +78,7 @@ export default function ChatList() {
   }, [chats, searchText]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <StatusBar barStyle="light-content" />
 
       <LinearGradient
@@ -114,6 +115,7 @@ export default function ChatList() {
         </View>
       </LinearGradient>
 
+      <View style={styles.content}>
       {loading ? (
         <View style={styles.centerState}>
           <ActivityIndicator size="large" color="#886BC1" />
@@ -129,7 +131,10 @@ export default function ChatList() {
         <FlatList
           data={filteredChats}
           keyExtractor={(item) => item.otherUserId}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: Math.max(insets.bottom + 16, 24) },
+          ]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => (
             <TouchableOpacity
@@ -178,18 +183,23 @@ export default function ChatList() {
           )}
         />
       )}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FFFFFF" },
+  safeArea: { flex: 1, backgroundColor: "#886BC1" },
   header: {
-    paddingTop: 15,
+    paddingTop: 14,
     paddingHorizontal: 20,
     paddingBottom: 25,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
+  },
+  content: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
   },
   topBar: {
     flexDirection: "row",
@@ -293,3 +303,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 });
+

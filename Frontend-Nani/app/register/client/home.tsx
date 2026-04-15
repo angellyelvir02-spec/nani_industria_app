@@ -14,7 +14,6 @@ import {
   FlatList,
   Image,
   Platform,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
@@ -22,6 +21,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ENDPOINTS } from "../../../constants/apiConfig";
 
 // --- TIPOS ---
@@ -92,6 +92,7 @@ const BabysitterCard = ({
 );
 
 export default function HomeScreen({ onNavigate }: HomeScreenProps) {
+  const insets = useSafeAreaInsets();
   const [searchText, setSearchText] = useState("");
   const [selectedFilter, setSelectedFilter] =
     useState<FilterType>("Disponibles");
@@ -329,7 +330,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <StatusBar barStyle="light-content" />
       <View style={styles.container}>
         {loading && babysitters.length === 0 ? (
@@ -360,7 +361,9 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
         )}
 
         {/* Nav Inferior */}
-        <View style={styles.bottomNav}>
+        <View
+          style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}
+        >
           <TouchableOpacity style={styles.navItem}>
             <Ionicons name="home" size={22} color="#886BC1" />
             <Text style={[styles.navText, { color: "#886BC1" }]}>Inicio</Text>
@@ -400,11 +403,11 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FAFAFA" },
-  container: { flex: 1 },
+  safeArea: { flex: 1, backgroundColor: "#886BC1" },
+  container: { flex: 1, backgroundColor: "#FAFAFA" },
   listContent: { paddingBottom: 0 },
   header: {
-    paddingTop: 22,
+    paddingTop: 14,
     paddingHorizontal: 16,
     paddingBottom: 18,
     borderBottomLeftRadius: 28,
@@ -534,3 +537,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+

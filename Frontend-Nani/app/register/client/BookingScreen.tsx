@@ -888,3 +888,4 @@ const styles = StyleSheet.create({
   ninoText: { color: "#886BC1", fontWeight: "600" },
   ninoTextSelected: { color: "#FFF" },
 });
+

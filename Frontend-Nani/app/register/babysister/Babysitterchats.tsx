@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ENDPOINTS } from "../../../constants/apiConfig";
 
 type ChatPreview = {
@@ -30,6 +30,7 @@ type ChatPreview = {
 
 export default function BabysitterChats() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<ChatPreview[]>([]);
@@ -77,7 +78,7 @@ export default function BabysitterChats() {
   }, [chats, searchText]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <StatusBar barStyle="light-content" />
 
       <LinearGradient
@@ -114,82 +115,91 @@ export default function BabysitterChats() {
         </View>
       </LinearGradient>
 
-      {loading ? (
-        <View style={styles.centerState}>
-          <ActivityIndicator size="large" color="#886BC1" />
-        </View>
-      ) : filteredChats.length === 0 ? (
-        <View style={styles.centerState}>
-          <Text style={styles.emptyTitle}>No tienes chats disponibles</Text>
-          <Text style={styles.emptyText}>
-            Aqui solo apareceran clientes con reserva confirmada o servicio en curso.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredChats}
-          keyExtractor={(item) => item.otherUserId}
-          contentContainerStyle={styles.listContent}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.chatCard}
-              onPress={() =>
-                router.push({
-                  pathname: "/register/babysister/BabysitterChatThread",
-                  params: {
-                    otherUserId: item.otherUserId,
-                    clientName: item.name,
-                    clientPhoto: item.photo || "",
-                  },
-                })
-              }
-            >
-              <View style={styles.avatarContainer}>
-                <Image
-                  source={{
-                    uri: item.photo || "https://via.placeholder.com/150",
-                  }}
-                  style={styles.avatar}
-                />
-                {item.isOnline && <View style={styles.onlineDot} />}
-              </View>
-
-              <View style={styles.chatInfo}>
-                <View style={styles.chatHeader}>
-                  <Text style={styles.name} numberOfLines={1}>
-                    {item.name}
-                  </Text>
-                  <Text style={styles.time}>{item.time || item.status}</Text>
+      <View style={styles.content}>
+        {loading ? (
+          <View style={styles.centerState}>
+            <ActivityIndicator size="large" color="#886BC1" />
+          </View>
+        ) : filteredChats.length === 0 ? (
+          <View style={styles.centerState}>
+            <Text style={styles.emptyTitle}>No tienes chats disponibles</Text>
+            <Text style={styles.emptyText}>
+              Aqui solo apareceran clientes con reserva confirmada o servicio en curso.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredChats}
+            keyExtractor={(item) => item.otherUserId}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: Math.max(insets.bottom + 16, 24) },
+            ]}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.chatCard}
+                onPress={() =>
+                  router.push({
+                    pathname: "/register/babysister/BabysitterChatThread",
+                    params: {
+                      otherUserId: item.otherUserId,
+                      clientName: item.name,
+                      clientPhoto: item.photo || "",
+                    },
+                  })
+                }
+              >
+                <View style={styles.avatarContainer}>
+                  <Image
+                    source={{
+                      uri: item.photo || "https://via.placeholder.com/150",
+                    }}
+                    style={styles.avatar}
+                  />
+                  {item.isOnline && <View style={styles.onlineDot} />}
                 </View>
 
-                <View style={styles.chatFooter}>
-                  <Text style={styles.lastMessage} numberOfLines={1}>
-                    {item.lastMessage}
-                  </Text>
-                  {item.unreadCount > 0 && (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadText}>{item.unreadCount}</Text>
-                    </View>
-                  )}
+                <View style={styles.chatInfo}>
+                  <View style={styles.chatHeader}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.time}>{item.time || item.status}</Text>
+                  </View>
+
+                  <View style={styles.chatFooter}>
+                    <Text style={styles.lastMessage} numberOfLines={1}>
+                      {item.lastMessage}
+                    </Text>
+                    {item.unreadCount > 0 && (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadText}>{item.unreadCount}</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          )}
-        />
-      )}
+              </TouchableOpacity>
+            )}
+          />
+        )}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FFFFFF" },
+  safeArea: { flex: 1, backgroundColor: "#886BC1" },
   header: {
-    paddingTop: 15,
+    paddingTop: 14,
     paddingHorizontal: 20,
     paddingBottom: 25,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
+  },
+  content: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
   },
   topBar: {
     flexDirection: "row",
@@ -293,3 +303,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 });
+
+

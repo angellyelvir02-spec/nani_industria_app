@@ -742,3 +742,5 @@ const styles = StyleSheet.create({
   },
   cashModalConfirmText: { color: "white", fontWeight: "700" },
 });
+
+

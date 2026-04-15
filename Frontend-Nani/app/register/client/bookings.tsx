@@ -8,12 +8,12 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
-  SafeAreaView,
   Modal,
   TextInput,
   Alert,
   AppState,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENDPOINTS } from "../../../constants/apiConfig";
@@ -284,7 +284,7 @@ export default function BookingsListScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
@@ -296,15 +296,17 @@ export default function BookingsListScreen() {
           />
         }
       >
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-          >
-            <ArrowLeft size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Mis reservas</Text>
-        </View>
+          <View style={styles.header}>
+            <View style={styles.headerTopRow}>
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={styles.backButton}
+              >
+                <ArrowLeft size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>Mis reservas</Text>
+            </View>
+          </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Próximas</Text>
@@ -643,16 +645,21 @@ export default function BookingsListScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FAFAFA" },
-  container: { flex: 1 },
+  safeArea: { flex: 1, backgroundColor: "#886BC1" },
+  container: { flex: 1, backgroundColor: "#FAFAFA" },
   scrollContent: { paddingBottom: 110 },
   header: {
     backgroundColor: "#886BC1",
     paddingHorizontal: 24,
-    paddingTop: 50,
+    paddingTop: 14,
     paddingBottom: 24,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
+  },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   backButton: {
     width: 40,
@@ -661,7 +668,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.20)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
   },
   headerTitle: { color: "#FFFFFF", fontSize: 24, fontWeight: "700" },
   section: { paddingHorizontal: 24, marginTop: 24 },
@@ -892,3 +898,4 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
+

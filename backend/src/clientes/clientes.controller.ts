@@ -1,13 +1,14 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
   Get,
   Headers,
-  BadRequestException,
   InternalServerErrorException,
   Param,
   ParseUUIDPipe,
   Patch,
-  Body,
+  Post,
 } from '@nestjs/common';
 import { ClientesService } from './clientes.service';
 import { AuthService } from '../auth/auth.service';
@@ -19,33 +20,37 @@ export class ClientesController {
     private readonly authService: AuthService,
   ) {}
 
-  @Get('mis-ninos')
-  async getMisNinos(@Headers('authorization') auth: string) {
+  private async getAuthUserIdFromHeader(auth: string) {
     if (!auth) {
-      throw new BadRequestException('No se proporcionó token de acceso');
+      throw new BadRequestException('No se proporciono token de acceso');
     }
 
     if (!auth.startsWith('Bearer ')) {
       throw new BadRequestException(
-        'Formato de token inválido, se esperaba Bearer',
+        'Formato de token invalido, se esperaba Bearer',
       );
     }
 
     const token = auth.replace('Bearer ', '').trim();
 
     if (!token) {
-      throw new BadRequestException('Token vacío');
+      throw new BadRequestException('Token vacio');
     }
 
+    const user = await this.authService.getMe(token);
+
+    if (!user || !user.id) {
+      throw new BadRequestException('Sesion invalida o expirada');
+    }
+
+    return user.id;
+  }
+
+  @Get('mis-ninos')
+  async getMisNinos(@Headers('authorization') auth: string) {
     try {
-      // Obtiene el usuario desde el token
-      const user = await this.authService.getMe(token);
-
-      if (!user || !user.id) {
-        throw new BadRequestException('Sesión inválida o expirada');
-      }
-
-      return this.clientesService.getMisNinos(user.id);
+      const userId = await this.getAuthUserIdFromHeader(auth);
+      return this.clientesService.getMisNinos(userId);
     } catch (err) {
       console.error('Error en getMisNinos (ClientesController):', err);
 
@@ -54,7 +59,54 @@ export class ClientesController {
       }
 
       throw new InternalServerErrorException(
-        'Error interno al validar la sesión',
+        'Error interno al validar la sesion',
+      );
+    }
+  }
+
+  @Get('mis-tarjetas')
+  async getMisTarjetas(@Headers('authorization') auth: string) {
+    try {
+      const userId = await this.getAuthUserIdFromHeader(auth);
+      return this.clientesService.getMisTarjetas(userId);
+    } catch (err) {
+      console.error('Error en getMisTarjetas (ClientesController):', err);
+
+      if (err instanceof BadRequestException) {
+        throw err;
+      }
+
+      throw new InternalServerErrorException(
+        'Error interno al obtener las tarjetas',
+      );
+    }
+  }
+
+  @Post('mis-tarjetas')
+  async createTarjeta(
+    @Headers('authorization') auth: string,
+    @Body()
+    body: {
+      titular?: string;
+      numero?: string;
+      vencimiento?: string;
+      cvv?: string;
+      marca?: string;
+      predeterminada?: boolean;
+    },
+  ) {
+    try {
+      const userId = await this.getAuthUserIdFromHeader(auth);
+      return this.clientesService.createTarjeta(userId, body);
+    } catch (err) {
+      console.error('Error en createTarjeta (ClientesController):', err);
+
+      if (err instanceof BadRequestException) {
+        throw err;
+      }
+
+      throw new InternalServerErrorException(
+        'Error interno al guardar la tarjeta',
       );
     }
   }

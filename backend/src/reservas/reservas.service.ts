@@ -98,6 +98,112 @@ export class ReservasService {
 
     const montoTotalFinal = montoBase + comisionNani + propina;
 
+    const { data: metodoPago, error: metodoPagoError } = await admin
+      .from('metodo_pago')
+      .select('id, nombre')
+      .eq('id', createReservaDto.metodo_pago_id)
+      .single();
+
+    if (metodoPagoError || !metodoPago) {
+      throw new BadRequestException('Metodo de pago no valido.');
+    }
+
+    const esTarjeta = metodoPago.nombre.toLowerCase().includes('tarjeta');
+    const estadoPagoReserva = esTarjeta ? 'completada' : 'pendiente';
+    const estadoPagoRegistro = esTarjeta ? 'completado' : 'pendiente';
+
+    let tarjetaUsada: any = null;
+
+    if (esTarjeta) {
+      const tarjetaGuardadaId = (createReservaDto as any).tarjeta_guardada_id;
+      const nuevaTarjeta = (createReservaDto as any).nueva_tarjeta;
+
+      if (tarjetaGuardadaId) {
+        const { data: tarjetaGuardada, error: tarjetaError } = await admin
+          .from('cliente_tarjeta')
+          .select('id, titular, marca, ultimos_4, vencimiento')
+          .eq('id', tarjetaGuardadaId)
+          .eq('cliente_id', cliente.id)
+          .single();
+
+        if (tarjetaError || !tarjetaGuardada) {
+          throw new BadRequestException('La tarjeta seleccionada no existe.');
+        }
+
+        tarjetaUsada = tarjetaGuardada;
+      } else if (nuevaTarjeta) {
+        const numero = String(nuevaTarjeta.numero ?? '').replace(/\D/g, '');
+        const titular = String(nuevaTarjeta.titular ?? '').trim();
+        const vencimiento = String(nuevaTarjeta.vencimiento ?? '').trim();
+        const cvv = String(nuevaTarjeta.cvv ?? '').replace(/\D/g, '');
+        const marca =
+          String(nuevaTarjeta.marca ?? '').trim() ||
+          (numero.startsWith('4')
+            ? 'Visa'
+            : numero.startsWith('5')
+              ? 'Mastercard'
+              : 'Tarjeta');
+
+        if (titular.length < 3) {
+          throw new BadRequestException(
+            'Debes ingresar el titular de la tarjeta.',
+          );
+        }
+
+        if (numero.length < 13) {
+          throw new BadRequestException(
+            'Debes ingresar un numero de tarjeta valido.',
+          );
+        }
+
+        if (!/^\d{2}\/\d{2}$/.test(vencimiento)) {
+          throw new BadRequestException(
+            'Debes ingresar una fecha de vencimiento valida.',
+          );
+        }
+
+        if (cvv.length < 3) {
+          throw new BadRequestException('Debes ingresar un CVV valido.');
+        }
+
+        const predeterminada = Boolean(nuevaTarjeta.predeterminada);
+
+        if (predeterminada) {
+          await admin
+            .from('cliente_tarjeta')
+            .update({ predeterminada: false })
+            .eq('cliente_id', cliente.id);
+        }
+
+        const { data: tarjetaNueva, error: tarjetaNuevaError } = await admin
+          .from('cliente_tarjeta')
+          .insert({
+            cliente_id: cliente.id,
+            titular,
+            numero,
+            ultimos_4: numero.slice(-4),
+            vencimiento,
+            cvv,
+            marca,
+            predeterminada,
+          })
+          .select('id, titular, marca, ultimos_4, vencimiento')
+          .single();
+
+        if (tarjetaNuevaError || !tarjetaNueva) {
+          throw new BadRequestException(
+            `No se pudo guardar la tarjeta: ${tarjetaNuevaError?.message}`,
+          );
+        }
+
+        tarjetaUsada = tarjetaNueva;
+      } else {
+        throw new BadRequestException(
+          'Debes seleccionar una tarjeta guardada o ingresar una nueva.',
+        );
+      }
+    }
+
     const { data: reserva, error: reservaError } = await admin
       .from('reserva')
       .insert({
@@ -114,7 +220,7 @@ export class ReservasService {
         monto_total: montoTotalFinal,
         monto_comision: comisionNani,
         estado: 'pendiente',
-        estado_pago: 'pendiente',
+        estado_pago: estadoPagoReserva,
       })
       .select()
       .single();
@@ -136,7 +242,7 @@ export class ReservasService {
         cargo_tiempo_adicional: 0,
         propina: Number(propina),
         total_a_recibir: Number(montoTotalFinal),
-        estado_pago: 'pendiente',
+        estado_pago: estadoPagoRegistro,
       })
       .select();
 
@@ -184,6 +290,9 @@ export class ReservasService {
       reservaId: reserva.id,
       codigoReserva: reserva.codigo_reserva,
       montoTotal: reserva.monto_total,
+      paymentStatus: reserva.estado_pago,
+      paymentUpfront: esTarjeta,
+      tarjeta: tarjetaUsada,
       nombreCliente: `${persona.nombre} ${persona.apellido}`,
       correoCliente: usuarioPerfil.correo,
       ninos: detallesNinos,
@@ -789,6 +898,8 @@ export class ReservasService {
         `
       id,
       estado,
+      estado_pago,
+      metodo_pago_id,
       cliente_id,
       cliente_confirmo_finalizacion,
       ninera_id,
@@ -824,8 +935,14 @@ export class ReservasService {
 
     const { data: pago } = await admin
       .from('pago')
-      .select('tarifa_por_hora, metodo_pago, estado_pago')
+      .select('tarifa_por_hora, estado_pago')
       .eq('reserva_id', reservaId)
+      .maybeSingle();
+
+    const { data: metodoPago } = await admin
+      .from('metodo_pago')
+      .select('nombre')
+      .eq('id', (reserva as any).metodo_pago_id)
       .maybeSingle();
 
     const seg: any = Array.isArray(reserva.seguimiento_sesion)
@@ -835,8 +952,11 @@ export class ReservasService {
     const tarifaPorHora = parseFloat(pago?.tarifa_por_hora ?? '0');
     const horasTrabajadas = parseFloat(seg?.tiempo_total_trabajado ?? '0');
     const totalCalculado = +(horasTrabajadas * tarifaPorHora).toFixed(2);
+    const metodoPagoNombre = metodoPago?.nombre || '';
+    const esTarjetaReal = metodoPagoNombre.toLowerCase().includes('tarjeta');
+    const pagoYaCompletado =
+      reserva.estado_pago === 'completada' || pago?.estado_pago === 'completado';
 
-    const esTarjeta = pago?.metodo_pago === 'Tarjeta de Crédito/Débito';
 
     const updateReserva: any = {
       estado: 'completada',
@@ -849,8 +969,7 @@ export class ReservasService {
       total_a_recibir: totalCalculado,
     };
 
-    if (esTarjeta) {
-      updateReserva.estado = 'completada';
+    if (esTarjetaReal && !pagoYaCompletado) {
       updateReserva.estado_pago = 'completada';
       updatePago.estado_pago = 'completado';
     }
@@ -863,12 +982,12 @@ export class ReservasService {
 
     return {
       success: true,
-      message: esTarjeta
+      message: esTarjetaReal
         ? 'Finalización y pago con tarjeta confirmados.'
         : 'Finalización confirmada. Pendiente confirmación de cobro en efectivo por la niñera.',
       horas_trabajadas: horasTrabajadas.toFixed(2),
       total_calculado: totalCalculado,
-      metodo_pago: pago?.metodo_pago,
+      metodo_pago: metodoPagoNombre,
     };
   }
 
@@ -1138,3 +1257,6 @@ export class ReservasService {
     };
   }
 }
+
+
+

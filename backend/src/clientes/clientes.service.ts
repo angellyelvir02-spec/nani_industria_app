@@ -10,6 +10,28 @@ import { SupabaseService } from '../supabase/supabase.service';
 export class ClientesService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
+  private async getClienteByUsuarioId(usuarioId: string) {
+    const admin = this.supabaseService.getAdminClient();
+
+    const { data: cliente, error } = await admin
+      .from('cliente')
+      .select('id, usuario_id, persona_id')
+      .eq('usuario_id', usuarioId)
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerErrorException(
+        `Error de base de datos: ${error.message}`,
+      );
+    }
+
+    if (!cliente) {
+      throw new NotFoundException('Perfil de cliente no encontrado');
+    }
+
+    return cliente;
+  }
+
   private formatRelativeTime(dateString?: string | null) {
     if (!dateString) return 'Reciente';
 
@@ -265,6 +287,106 @@ export class ClientesService {
     return notificationItems;
   }
 
+  async getMisTarjetas(userId: string) {
+    const admin = this.supabaseService.getAdminClient();
+    const cliente = await this.getClienteByUsuarioId(userId);
+
+    const { data, error } = await admin
+      .from('cliente_tarjeta')
+      .select(
+        'id, titular, marca, ultimos_4, vencimiento, predeterminada, created_at',
+      )
+      .eq('cliente_id', cliente.id)
+      .order('predeterminada', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new InternalServerErrorException(
+        `Error obteniendo tarjetas: ${error.message}`,
+      );
+    }
+
+    return data ?? [];
+  }
+
+  async createTarjeta(
+    userId: string,
+    body: {
+      titular?: string;
+      numero?: string;
+      vencimiento?: string;
+      cvv?: string;
+      marca?: string;
+      predeterminada?: boolean;
+    },
+  ) {
+    const admin = this.supabaseService.getAdminClient();
+    const cliente = await this.getClienteByUsuarioId(userId);
+
+    const numero = String(body.numero ?? '').replace(/\D/g, '');
+    const titular = String(body.titular ?? '').trim();
+    const vencimiento = String(body.vencimiento ?? '').trim();
+    const cvv = String(body.cvv ?? '').replace(/\D/g, '');
+
+    if (titular.length < 3) {
+      throw new BadRequestException('El titular de la tarjeta es requerido.');
+    }
+
+    if (numero.length < 13) {
+      throw new BadRequestException('Numero de tarjeta invalido.');
+    }
+
+    if (!/^\d{2}\/\d{2}$/.test(vencimiento)) {
+      throw new BadRequestException('Formato de vencimiento invalido.');
+    }
+
+    if (cvv.length < 3) {
+      throw new BadRequestException('CVV invalido.');
+    }
+
+    const ultimos4 = numero.slice(-4);
+    const marca =
+      String(body.marca ?? '').trim() ||
+      (numero.startsWith('4')
+        ? 'Visa'
+        : numero.startsWith('5')
+          ? 'Mastercard'
+          : 'Tarjeta');
+    const predeterminada = Boolean(body.predeterminada);
+
+    if (predeterminada) {
+      await admin
+        .from('cliente_tarjeta')
+        .update({ predeterminada: false })
+        .eq('cliente_id', cliente.id);
+    }
+
+    const { data, error } = await admin
+      .from('cliente_tarjeta')
+      .insert({
+        cliente_id: cliente.id,
+        titular,
+        numero,
+        ultimos_4: ultimos4,
+        vencimiento,
+        cvv,
+        marca,
+        predeterminada,
+      })
+      .select(
+        'id, titular, marca, ultimos_4, vencimiento, predeterminada, created_at',
+      )
+      .single();
+
+    if (error || !data) {
+      throw new InternalServerErrorException(
+        `Error guardando tarjeta: ${error?.message}`,
+      );
+    }
+
+    return data;
+  }
+
   async getMisNinos(userId: string) {
     const admin = this.supabaseService.getAdminClient();
 
@@ -274,22 +396,7 @@ export class ClientesService {
 
     try {
       // Obtiene el id de la tabla cliente vinculado al usuario autenticado
-      const { data: cliente, error: clientError } = await admin
-        .from('cliente')
-        .select('id')
-        .eq('usuario_id', userId)
-        .maybeSingle();
-
-      if (clientError) {
-        console.error('Error obteniendo cliente en getMisNinos:', clientError);
-        throw new InternalServerErrorException(
-          `Error de base de datos: ${clientError.message}`,
-        );
-      }
-
-      if (!cliente) {
-        throw new NotFoundException('Perfil de cliente no encontrado');
-      }
+      const cliente = await this.getClienteByUsuarioId(userId);
 
       // Consulta los niños vinculados al cliente
       const { data: ninos, error: ninosError } = await admin

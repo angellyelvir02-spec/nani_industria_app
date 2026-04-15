@@ -40,6 +40,8 @@ export const ENDPOINTS = {
     buildUrl(`/clientes/usuario/${usuarioId}/notificaciones`),
 
   get_mis_ninos: buildUrl("/clientes/mis-ninos"),
+  get_mis_tarjetas: buildUrl("/clientes/mis-tarjetas"),
+  create_mi_tarjeta: buildUrl("/clientes/mis-tarjetas"),
 
   crear_reserva: buildUrl("/reservas"),
 

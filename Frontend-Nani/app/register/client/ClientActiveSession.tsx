@@ -358,6 +358,14 @@ export default function ClientJobTracking() {
 
   // ── Detectar si el servicio acaba de finalizar para mostrar la pasarela ──
   useEffect(() => {
+    const paymentStatus = String(booking?.paymentStatus ?? "").toLowerCase();
+    if (paymentStatus === "completada" || paymentStatus === "completado") {
+      setPaymentDone(true);
+      setShowPaymentGateway(false);
+    }
+  }, [booking?.paymentStatus]);
+
+  useEffect(() => {
     if (!booking || paymentDone) return;
 
     const isFinished =
@@ -367,11 +375,19 @@ export default function ClientJobTracking() {
       booking.status === "finalizado";
 
     const esTarjeta = booking.paymentMethod?.toLowerCase().includes("tarjeta");
+    const paymentStatus = String(booking.paymentStatus ?? "").toLowerCase();
+    const pagoYaRealizado =
+      paymentStatus === "completada" || paymentStatus === "completado";
 
-    if (isFinished && esTarjeta && !booking.cliente_confirmo_finalizacion) {
+    if (
+      isFinished &&
+      esTarjeta &&
+      !pagoYaRealizado &&
+      !booking.cliente_confirmo_finalizacion
+    ) {
       setShowPaymentGateway(true);
     }
-  }, [booking?.status]);
+  }, [booking, paymentDone]);
 
   const qrValue = useMemo(() => {
     if (!booking || !booking.id) return "invalid";

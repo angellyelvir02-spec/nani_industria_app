@@ -3,6 +3,7 @@ import {
   IsDateString,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -68,4 +69,19 @@ export class CreateReservaDto {
   @IsNumber()
   @IsOptional()
   propina?: number;
+
+  @IsOptional()
+  @IsUUID()
+  tarjeta_guardada_id?: string;
+
+  @IsOptional()
+  @IsObject()
+  nueva_tarjeta?: {
+    titular?: string;
+    numero?: string;
+    vencimiento?: string;
+    cvv?: string;
+    marca?: string;
+    predeterminada?: boolean;
+  };
 }

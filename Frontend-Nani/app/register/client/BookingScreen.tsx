@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -37,6 +39,35 @@ type MetodoPago = {
   nombre: string;
 };
 
+type TarjetaGuardada = {
+  id: string;
+  titular: string;
+  marca: string;
+  ultimos_4: string;
+  vencimiento: string;
+  predeterminada?: boolean;
+};
+
+function formatCardNumber(value: string) {
+  return value
+    .replace(/\D/g, "")
+    .slice(0, 16)
+    .replace(/(.{4})/g, "$1 ")
+    .trim();
+}
+
+function formatExpiry(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 4);
+  if (digits.length >= 3) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return digits;
+}
+
+function guessCardBrand(number: string) {
+  if (number.startsWith("4")) return "Visa";
+  if (number.startsWith("5")) return "Mastercard";
+  return "Tarjeta";
+}
+
 export default function BookingScreen() {
   const router = useRouter();
   const { babysitterId, name, photo, hourlyRate } = useLocalSearchParams();
@@ -62,6 +93,16 @@ export default function BookingScreen() {
   const [metodoSeleccionado, setMetodoSeleccionado] = useState<string | null>(
     null,
   );
+  const [tarjetasGuardadas, setTarjetasGuardadas] = useState<TarjetaGuardada[]>(
+    [],
+  );
+  const [showCardModal, setShowCardModal] = useState(false);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [useNewCard, setUseNewCard] = useState(false);
+  const [cardHolder, setCardHolder] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvv, setCardCvv] = useState("");
   const [isConfirming, setIsConfirming] = useState(false);
 
   const babysitter = useMemo(
@@ -79,17 +120,29 @@ export default function BookingScreen() {
         const token = await AsyncStorage.getItem("userToken");
         const headers = { Authorization: `Bearer ${token}` };
 
-        const [resNinos, resMetodos] = await Promise.all([
+        const [resNinos, resMetodos, resTarjetas] = await Promise.all([
           fetch(ENDPOINTS.get_mis_ninos, { headers }),
           fetch(ENDPOINTS.get_metodo_pago, { headers }),
+          fetch(ENDPOINTS.get_mis_tarjetas, { headers }),
         ]);
 
         const dataNinos = await resNinos.json();
         const dataMetodos = await resMetodos.json();
+        const dataTarjetas = await resTarjetas.json();
 
         setNinos(dataNinos || []);
         setMetodosPago(dataMetodos || []);
+        setTarjetasGuardadas(dataTarjetas || []);
         if (dataMetodos.length > 0) setMetodoSeleccionado(dataMetodos[0].id);
+        if (dataTarjetas?.length > 0) {
+          const predeterminada =
+            dataTarjetas.find((item: TarjetaGuardada) => item.predeterminada) ||
+            dataTarjetas[0];
+          setSelectedCardId(predeterminada.id);
+          setUseNewCard(false);
+        } else {
+          setUseNewCard(true);
+        }
       } catch (error) {
         console.error("Error cargando datos iniciales:", error);
       } finally {
@@ -176,7 +229,7 @@ export default function BookingScreen() {
     return { subtotal, fee, total: subtotal + fee };
   }, [duration, babysitter.hourlyRate]);
 
-  // Helper para saber si el método seleccionado es tarjeta
+  // Helper para saber si el metodo seleccionado es tarjeta
   const esTarjetaSeleccionada = useMemo(() => {
     if (!metodoSeleccionado) return false;
     return (
@@ -186,6 +239,158 @@ export default function BookingScreen() {
         .includes("tarjeta") ?? false
     );
   }, [metodoSeleccionado, metodosPago]);
+
+  const validateNewCard = () => {
+    const holder = cardHolder.trim();
+    const number = cardNumber.replace(/\D/g, "");
+    const cvv = cardCvv.replace(/\D/g, "");
+
+    if (holder.length < 3) {
+      Alert.alert("Tarjeta", "Ingresa el nombre del titular.");
+      return false;
+    }
+
+    if (number.length < 13) {
+      Alert.alert("Tarjeta", "Ingresa un numero de tarjeta valido.");
+      return false;
+    }
+
+    if (!/^\d{2}\/\d{2}$/.test(cardExpiry)) {
+      Alert.alert("Tarjeta", "Ingresa una fecha de vencimiento valida.");
+      return false;
+    }
+
+    if (cvv.length < 3) {
+      Alert.alert("Tarjeta", "Ingresa un CVV valido.");
+      return false;
+    }
+
+    return true;
+  };
+
+  const submitReservation = async (horaFinBase: string) => {
+    setIsConfirming(true);
+
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+
+      const sumarUnaHora = (hora: string) => {
+        const [h, m] = hora.split(":").map(Number);
+        const nuevaHora = h + 1;
+        return `${String(nuevaHora).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      };
+
+      const body: Record<string, any> = {
+        ninera_id: id,
+        metodo_pago_id: metodoSeleccionado,
+        fecha_servicio: selectedDate,
+        hora_inicio: selectedStartTime,
+        hora_fin: sumarUnaHora(horaFinBase),
+        monto_base: pricing.subtotal,
+        monto_comision: pricing.fee,
+        tarifa_por_hora: babysitter.hourlyRate,
+        propina: 0,
+        notas_importantes: notas,
+        ninos_ids: selectedNinos,
+      };
+
+      if (esTarjetaSeleccionada) {
+        if (useNewCard) {
+          body.nueva_tarjeta = {
+            titular: cardHolder.trim(),
+            numero: cardNumber.replace(/\D/g, ""),
+            vencimiento: cardExpiry,
+            cvv: cardCvv.replace(/\D/g, ""),
+            marca: guessCardBrand(cardNumber.replace(/\D/g, "")),
+            predeterminada: tarjetasGuardadas.length === 0,
+          };
+        } else {
+          body.tarjeta_guardada_id = selectedCardId;
+        }
+      }
+
+      const response = await fetch(ENDPOINTS.crear_reserva, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || "Error en la reserva");
+      }
+
+      setShowCardModal(false);
+
+      if (result.tarjeta) {
+        setTarjetasGuardadas((prev) => {
+          const exists = prev.some((item) => item.id === result.tarjeta.id);
+          return exists ? prev : [result.tarjeta, ...prev];
+        });
+        setSelectedCardId(result.tarjeta.id);
+        setUseNewCard(false);
+      }
+
+      const ninosDetalle = ninos.filter((n) => selectedNinos.includes(n.id));
+      const successMsg = esTarjetaSeleccionada
+        ? "Reserva creada y pago con tarjeta registrado."
+        : "Reserva creada correctamente.";
+
+      if (Platform.OS === "web") {
+        window.alert(successMsg);
+        router.replace({
+          pathname: "/register/client/ReservationSuccess" as any,
+          params: {
+            reservaId: result.reservaId,
+            codigoReserva: result.codigoReserva,
+            montoTotal: result.montoTotal || pricing.total,
+            nombreNinera: babysitter.name,
+            fecha: selectedDate,
+            ninos: JSON.stringify(ninosDetalle),
+            metodoPago:
+              metodosPago.find((m) => m.id === metodoSeleccionado)?.nombre || "",
+          },
+        });
+      } else {
+        Alert.alert("Exito", successMsg, [
+          {
+            text: "OK",
+            onPress: () =>
+              router.replace({
+                pathname: "/register/client/ReservationSuccess" as any,
+                params: {
+                  reservaId: result.reservaId,
+                  codigoReserva: result.codigoReserva,
+                  montoTotal: result.montoTotal || pricing.total,
+                  nombreNinera: babysitter.name,
+                  fecha: selectedDate,
+                  ninos: JSON.stringify(ninosDetalle),
+                  metodoPago:
+                    metodosPago.find((m) => m.id === metodoSeleccionado)?.nombre ||
+                    "",
+                },
+              }),
+          },
+        ]);
+      }
+    } catch (error: any) {
+      console.error("Error:", error);
+
+      if (Platform.OS === "web") {
+        window.alert("Error: " + (error.message || "No se pudo conectar"));
+      } else {
+        Alert.alert(
+          "Error de conexion",
+          error.message || "No se pudo conectar.",
+        );
+      }
+    } finally {
+      setIsConfirming(false);
+    }
+  };
 
   const handleConfirmarReserva = async () => {
     if (selectedNinos.length === 0) {
@@ -249,110 +454,26 @@ export default function BookingScreen() {
       return;
     }
 
-    setIsConfirming(true);
-    console.log("🚀 Iniciando proceso de reserva...");
-
-    try {
-      const token = await AsyncStorage.getItem("userToken");
-
-      const sumarUnaHora = (hora: string) => {
-        const [h, m] = hora.split(":").map(Number);
-        const nuevaHora = h + 1;
-        return `${String(nuevaHora).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-      };
-
-      const body = {
-        ninera_id: id,
-        metodo_pago_id: metodoSeleccionado,
-        fecha_servicio: selectedDate,
-        hora_inicio: selectedStartTime,
-        hora_fin: sumarUnaHora(horaFinBase),
-        monto_base: pricing.subtotal,
-        monto_comision: pricing.fee,
-        tarifa_por_hora: babysitter.hourlyRate,
-        propina: 0,
-        notas_importantes: notas,
-        ninos_ids: selectedNinos,
-      };
-
-      const response = await fetch(ENDPOINTS.crear_reserva, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.message || "Error en la reserva");
+    if (esTarjetaSeleccionada) {
+      if (tarjetasGuardadas.length === 0) {
+        setUseNewCard(true);
       }
-
-      // Si es tarjeta y el backend devuelve una URL de pago (PixelPay), redirigir
-      if (esTarjetaSeleccionada && result.pixelPayUrl) {
-        router.push({
-          pathname: "/register/client/WebView",
-          params: { url: result.pixelPayUrl, reservaId: result.reservaId },
-        });
-      } else {
-        const ninosDetalle = ninos.filter((n) => selectedNinos.includes(n.id));
-
-        const successMsg = "Reserva creada correctamente.";
-
-        if (Platform.OS === "web") {
-          window.alert(successMsg);
-          router.replace({
-            pathname: "/register/client/ReservationSuccess" as any,
-            params: {
-              reservaId: result.reservaId,
-              codigoReserva: result.codigoReserva,
-              montoTotal: result.montoTotal || pricing.total,
-              nombreNinera: babysitter.name,
-              fecha: selectedDate,
-              ninos: JSON.stringify(ninosDetalle),
-              metodoPago:
-                metodosPago.find((m) => m.id === metodoSeleccionado)?.nombre ||
-                "",
-            },
-          });
-        } else {
-          Alert.alert("¡Éxito!", successMsg, [
-            {
-              text: "OK",
-              onPress: () =>
-                router.replace({
-                  pathname: "/register/client/ReservationSuccess" as any,
-                  params: {
-                    reservaId: result.reservaId,
-                    codigoReserva: result.codigoReserva,
-                    montoTotal: result.montoTotal || pricing.total,
-                    nombreNinera: babysitter.name,
-                    fecha: selectedDate,
-                    ninos: JSON.stringify(ninosDetalle),
-                    metodoPago:
-                      metodosPago.find((m) => m.id === metodoSeleccionado)
-                        ?.nombre || "",
-                  },
-                }),
-            },
-          ]);
-        }
-      }
-    } catch (error: any) {
-      console.error("Error:", error);
-
-      if (Platform.OS === "web") {
-        window.alert("Error: " + (error.message || "No se pudo conectar"));
-      } else {
-        Alert.alert(
-          "Error de Conexión",
-          error.message || "No se pudo conectar.",
-        );
-      }
-    } finally {
-      setIsConfirming(false);
+      setShowCardModal(true);
+      return;
     }
+
+    await submitReservation(String(horaFinBase));
+  };
+
+  const handleConfirmCardReservation = async () => {
+    if (useNewCard) {
+      if (!validateNewCard()) return;
+    } else if (!selectedCardId) {
+      Alert.alert("Tarjeta", "Selecciona una tarjeta guardada.");
+      return;
+    }
+
+    await submitReservation(String(selectedEndTime || selectedStartTime));
   };
 
   return (
@@ -375,7 +496,7 @@ export default function BookingScreen() {
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* Tarjeta Niñera */}
+          {/* Tarjeta Ninera */}
           <View style={styles.babysitterCard}>
             <Image
               source={{ uri: babysitter.photo }}
@@ -395,7 +516,7 @@ export default function BookingScreen() {
             </View>
           </View>
 
-          {/* Niños */}
+          {/* Ninos */}
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitlePlain}>¿A quién cuidaremos?</Text>
             {isLoadingInitial ? (
@@ -452,7 +573,7 @@ export default function BookingScreen() {
             />
           </View>
 
-          {/* ── MÉTODO DE PAGO — ahora siempre visible ── */}
+          {/* Metodo de Pago */}
           <View style={styles.sectionCard}>
             <View style={styles.paymentSectionHeader}>
               <Ionicons name="wallet-outline" size={20} color="#886BC1" />
@@ -502,7 +623,7 @@ export default function BookingScreen() {
                   })}
                 </View>
 
-                {/* Aviso informativo según el método */}
+                {/* Aviso informativo segun el metodo */}
                 {metodoSeleccionado && (
                   <View
                     style={[
@@ -526,8 +647,8 @@ export default function BookingScreen() {
                       ]}
                     >
                       {esTarjetaSeleccionada
-                        ? "Al finalizar el servicio se te solicitará los datos de tu tarjeta para completar el pago."
-                        : "Al finalizar el servicio, la niñera confirmará que recibió el pago en efectivo."}
+                        ? "El pago con tarjeta se registra por adelantado al crear la reserva."
+                        : "Al finalizar el servicio, la ninera confirmara que recibio el pago en efectivo."}
                     </Text>
                   </View>
                 )}
@@ -537,7 +658,7 @@ export default function BookingScreen() {
 
           {/* Calendario */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitlePlain}>Selecciona el día</Text>
+            <Text style={styles.sectionTitlePlain}>Selecciona el dia</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -626,7 +747,7 @@ export default function BookingScreen() {
                 })}
                 <Text style={{ fontSize: 12, color: "#888", marginTop: 8 }}>
                   Puedes seleccionar una sola hora o un rango. Si eliges solo
-                  una, se reservará 1 hora.
+                  una, se reservara 1 hora.
                 </Text>
               </View>
             )}
@@ -641,7 +762,7 @@ export default function BookingScreen() {
                 <Text>L {pricing.subtotal.toFixed(2)}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text>Comisión Nani (10%):</Text>
+                <Text>Comision Nani (10%):</Text>
                 <Text>L {pricing.fee.toFixed(2)}</Text>
               </View>
               <View style={styles.summaryDivider} />
@@ -696,6 +817,154 @@ export default function BookingScreen() {
             )}
           </TouchableOpacity>
         </View>
+
+        <Modal
+          visible={showCardModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowCardModal(false)}
+        >
+          <KeyboardAvoidingView
+            style={styles.modalOverlay}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            <View style={styles.cardModal}>
+              <View style={styles.cardModalHeader}>
+                <Text style={styles.cardModalTitle}>Pago con tarjeta</Text>
+                <TouchableOpacity onPress={() => setShowCardModal(false)}>
+                  <Ionicons name="close" size={22} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.cardModalSubtitle}>
+                El pago se registra al crear la reserva. Puedes usar una tarjeta
+                guardada o agregar una nueva.
+              </Text>
+
+              <ScrollView
+                style={styles.cardModalScroll}
+                keyboardShouldPersistTaps="handled"
+              >
+                {tarjetasGuardadas.length > 0 && (
+                  <View style={styles.savedCardsSection}>
+                    <Text style={styles.savedCardsTitle}>Tarjetas guardadas</Text>
+                    {tarjetasGuardadas.map((tarjeta) => {
+                      const isSelected =
+                        !useNewCard && selectedCardId === tarjeta.id;
+                      return (
+                        <TouchableOpacity
+                          key={tarjeta.id}
+                          style={[
+                            styles.savedCardItem,
+                            isSelected && styles.savedCardItemSelected,
+                          ]}
+                          onPress={() => {
+                            setUseNewCard(false);
+                            setSelectedCardId(tarjeta.id);
+                          }}
+                        >
+                          <View>
+                            <Text style={styles.savedCardBrand}>
+                              {tarjeta.marca || "Tarjeta"} ••••{" "}
+                              {tarjeta.ultimos_4}
+                            </Text>
+                            <Text style={styles.savedCardMeta}>
+                              {tarjeta.titular} • Vence {tarjeta.vencimiento}
+                            </Text>
+                          </View>
+                          {isSelected && (
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={20}
+                              color="#886BC1"
+                            />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+
+                    <TouchableOpacity
+                      style={styles.newCardToggle}
+                      onPress={() => setUseNewCard((prev) => !prev)}
+                    >
+                      <Ionicons
+                        name={
+                          useNewCard
+                            ? "remove-circle-outline"
+                            : "add-circle-outline"
+                        }
+                        size={18}
+                        color="#886BC1"
+                      />
+                      <Text style={styles.newCardToggleText}>
+                        {useNewCard
+                          ? "Cancelar nueva tarjeta"
+                          : "Usar otra tarjeta"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {(useNewCard || tarjetasGuardadas.length === 0) && (
+                  <View style={styles.newCardSection}>
+                    <Text style={styles.savedCardsTitle}>Nueva tarjeta</Text>
+                    <TextInput
+                      style={styles.cardInput}
+                      placeholder="Titular de la tarjeta"
+                      value={cardHolder}
+                      onChangeText={setCardHolder}
+                    />
+                    <TextInput
+                      style={styles.cardInput}
+                      placeholder="0000 0000 0000 0000"
+                      keyboardType="numeric"
+                      value={cardNumber}
+                      onChangeText={(value) => setCardNumber(formatCardNumber(value))}
+                      maxLength={19}
+                    />
+                    <View style={styles.cardInputRow}>
+                      <TextInput
+                        style={[styles.cardInput, styles.cardInputHalf]}
+                        placeholder="MM/AA"
+                        keyboardType="numeric"
+                        value={cardExpiry}
+                        onChangeText={(value) => setCardExpiry(formatExpiry(value))}
+                        maxLength={5}
+                      />
+                      <TextInput
+                        style={[styles.cardInput, styles.cardInputHalf]}
+                        placeholder="CVV"
+                        keyboardType="numeric"
+                        secureTextEntry
+                        value={cardCvv}
+                        onChangeText={(value) =>
+                          setCardCvv(value.replace(/\D/g, "").slice(0, 4))
+                        }
+                        maxLength={4}
+                      />
+                    </View>
+                  </View>
+                )}
+              </ScrollView>
+
+              <TouchableOpacity
+                style={[
+                  styles.confirmButton,
+                  styles.cardModalButton,
+                  isConfirming && styles.btnDisabled,
+                ]}
+                disabled={isConfirming}
+                onPress={handleConfirmCardReservation}
+              >
+                {isConfirming ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>Pagar y reservar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -827,7 +1096,7 @@ const styles = StyleSheet.create({
   },
   summaryMethodText: { color: "#886BC1", fontWeight: "600", fontSize: 13 },
 
-  // Método de pago
+  // Método de Pago
   paymentSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -859,6 +1128,104 @@ const styles = StyleSheet.create({
   paymentInfoBoxCard: { backgroundColor: "#F3EEFF" },
   paymentInfoText: { flex: 1, fontSize: 12, color: "#2E7D32", lineHeight: 18 },
   paymentInfoTextCard: { color: "#6A4C9C" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  cardModal: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: "85%",
+  },
+  cardModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  cardModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#2E2E2E",
+  },
+  cardModalSubtitle: {
+    fontSize: 13,
+    color: "#666",
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  cardModalScroll: {
+    maxHeight: 420,
+  },
+  savedCardsSection: {
+    marginBottom: 16,
+  },
+  savedCardsTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#886BC1",
+    marginBottom: 10,
+  },
+  savedCardItem: {
+    borderWidth: 1,
+    borderColor: "#E3D9F6",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  savedCardItemSelected: {
+    borderColor: "#886BC1",
+    backgroundColor: "#F7F2FF",
+  },
+  savedCardBrand: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#2E2E2E",
+  },
+  savedCardMeta: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
+  },
+  newCardToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    marginTop: 4,
+  },
+  newCardToggleText: {
+    color: "#886BC1",
+    fontWeight: "600",
+  },
+  newCardSection: {
+    marginBottom: 12,
+  },
+  cardInput: {
+    backgroundColor: "#F9F9F9",
+    borderWidth: 1,
+    borderColor: "#EAEAEA",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  cardInputRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  cardInputHalf: {
+    flex: 1,
+  },
+  cardModalButton: {
+    marginTop: 12,
+  },
 
   bottomBar: {
     padding: 16,
@@ -888,4 +1255,6 @@ const styles = StyleSheet.create({
   ninoText: { color: "#886BC1", fontWeight: "600" },
   ninoTextSelected: { color: "#FFF" },
 });
+
+
 

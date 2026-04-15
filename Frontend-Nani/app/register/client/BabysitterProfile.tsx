@@ -201,6 +201,18 @@ export default function BabysitterProfile() {
                   <Text style={styles.profileName} numberOfLines={2}>
                     {babysitter.name}
                   </Text>
+                  {babysitter.verified && (
+                    <View style={styles.verifiedBadge}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={14}
+                        color="#22C55E"
+                      />
+                      <Text style={styles.verifiedBadgeText}>
+                        Niñera verificada
+                      </Text>
+                    </View>
+                  )}
                   <View style={styles.infoRow}>
                     <FontAwesome name="star" size={14} color="#FF768A" />
                     <Text style={styles.ratingValue}>
@@ -228,6 +240,44 @@ export default function BabysitterProfile() {
               <Text style={styles.aboutText}>{babysitter.about}</Text>
             </View>
           </View>
+
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Experiencia</Text>
+              <Text style={styles.aboutText}>{babysitter.experience}</Text>
+            </View>
+          </View>
+
+          {babysitter.skills.length > 0 && (
+            <View style={styles.sectionContainer}>
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Habilidades</Text>
+                <View style={styles.chipsWrap}>
+                  {babysitter.skills.map((skill, index) => (
+                    <View key={`${skill}-${index}`} style={styles.infoChip}>
+                      <Text style={styles.infoChipText}>{skill}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          )}
+
+          {babysitter.certifications.length > 0 && (
+            <View style={styles.sectionContainer}>
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Certificaciones</Text>
+                <View style={styles.chipsWrap}>
+                  {babysitter.certifications.map((cert, index) => (
+                    <View key={`${cert}-${index}`} style={styles.certChip}>
+                      <Feather name="award" size={14} color="#886BC1" />
+                      <Text style={styles.certChipText}>{cert}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          )}
 
           {/* Disponibilidad */}
           <View style={styles.sectionContainer}>
@@ -315,8 +365,13 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   loadingText: { marginTop: 10, color: "#886BC1" },
   container: { flex: 1 },
-  imageHeader: { height: 260 },
-  headerImage: { width: "100%", height: "100%" },
+  imageHeader: {
+    height: 260,
+    backgroundColor: "#F4EEFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerImage: { width: "100%", height: "100%", resizeMode: "contain" },
   topLeftButton: {
     position: "absolute",
     top: 40,
@@ -338,6 +393,22 @@ const styles = StyleSheet.create({
   },
   profileTopRow: { flexDirection: "row", justifyContent: "space-between" },
   profileName: { fontSize: 22, fontWeight: "700", color: "#2E2E2E" },
+  verifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    backgroundColor: "#ECFDF3",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginTop: 10,
+  },
+  verifiedBadgeText: {
+    color: "#15803D",
+    fontWeight: "700",
+    fontSize: 12,
+  },
   infoRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
   ratingValue: { marginLeft: 5, fontWeight: "600" },
   reviewsText: { marginLeft: 5, color: "#9A9A9A", fontSize: 12 },
@@ -358,6 +429,38 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   aboutText: { color: "#666", lineHeight: 20 },
+  chipsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  infoChip: {
+    backgroundColor: "#F7F2FF",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#E2D5FA",
+  },
+  infoChipText: {
+    color: "#6A4C9C",
+    fontWeight: "600",
+  },
+  certChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FFF6F8",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#FFD5DD",
+  },
+  certChipText: {
+    color: "#886BC1",
+    fontWeight: "600",
+  },
   availabilityRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -437,4 +540,7 @@ const styles = StyleSheet.create({
   },
   bookButtonText: { color: "#FFF", fontSize: 16, fontWeight: "800" },
 });
+
+
+
 
